@@ -133,7 +133,7 @@ typedef struct {
 /* For objects with align == 4 and align_offset == 0 (e.g. vector strings). */
 typedef struct {
   union {
-#ifdef CLIB_HAVE_VEC128
+#if CLIB_VECTOR_WORD_BITS >= 128
     u8x16 as_u8x16[BITS (uword) / 16];
 #endif
 
