@@ -21,10 +21,10 @@
   WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-always_inline void zero_pair (hash_t * h, hash_pair_t * p)
+always_inline void hash_zero_pair (hash_t * h, hash_pair_t * p)
 { memset (p, 0, hash_pair_bytes (h)); }
 
-always_inline void init_pair (hash_t * h, hash_pair_t * p)
+always_inline void hash_init_pair (hash_t * h, hash_pair_t * p)
 { memset (p->value, ~0, hash_value_bytes (h)); }
 
 always_inline hash_pair_union_t *
@@ -339,7 +339,7 @@ set_indirect_is_user (void * v,
   /* First element is used by existing pair, second will be used by caller. */
   q = hash_forward1 (h, q);
   q->key = key;
-  init_pair (h, q);
+  hash_init_pair (h, q);
   return (hash_pair_union_t *) q;
 }
 
@@ -380,7 +380,7 @@ set_indirect (void * v, hash_pair_indirect_t * pi, uword key,
       new_pair = pi->pairs + (len << h->log2_pair_size);
     }
   new_pair->key = key;
-  init_pair (h, new_pair);
+  hash_init_pair (h, new_pair);
   *found_key = 0;
   return (hash_pair_union_t *) new_pair;
 }
@@ -412,7 +412,7 @@ static void unset_indirect (void * v, uword i, hash_pair_t * q)
 	  set_is_user (v, i, 1);
 	}
       else
-	zero_pair (h, &p->direct);
+	hash_zero_pair (h, &p->direct);
 
       if (is_vec)
 	vec_free (r);
@@ -425,7 +425,7 @@ static void unset_indirect (void * v, uword i, hash_pair_t * q)
       if (q < e)
 	memcpy (q, e, hash_pair_bytes (h));
       else
-	zero_pair (h, q);
+	hash_zero_pair (h, q);
       if (is_vec)
 	_vec_len (pi->pairs) -= 1;
       else
@@ -465,7 +465,7 @@ static hash_pair_t * lookup (void * v, uword key, enum lookup_opcode op,
 	      set_is_user (v, i, 0);
 	      if (old_value)
 		memcpy (old_value, p->direct.value, hash_value_bytes (h));
-	      zero_pair (h, &p->direct);
+	      hash_zero_pair (h, &p->direct);
 	    }
 	}
       else
