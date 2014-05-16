@@ -141,12 +141,7 @@ always_inline u64x2 u64x2_splat (u64 a)
 }
 
 always_inline u32x4 u32x4_splat (u32 a)
-{
-  u32x4 x = {a};
-  x = u32x4_interleave_lo (x, x);
-  x = (u32x4) u64x2_interleave_lo ((u64x2) x, (u64x2) x);
-  return x;
-}
+{ return (u32x4) {a,a,a,a}; }
 
 always_inline u16x8 u16x8_splat (u16 a)
 {
@@ -158,7 +153,7 @@ always_inline u8x16 u8x16_splat (u8 a)
 {
   u32 t = (u32) a | ((u32) a << 8);
   t |= t << 16;
-  return (u8x16) u16x8_splat (t);
+  return (u8x16) u32x4_splat (t);
 }
 
 always_inline u32x2 u32x2_splat (u32 a)
