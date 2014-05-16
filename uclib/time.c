@@ -29,8 +29,8 @@
    for unix.  Better to use /proc/cpuinfo on linux. */
 static f64 estimate_clock_frequency (f64 sample_time)
 {
-  /* Round to nearest 100KHz. */
-  const f64 round_to_units = 100e5;
+  /* Round to nearest 100MHz. */
+  const f64 round_to_units = 100e6;
 
   f64 time_now, time_start, time_limit, freq;
   u64 ifreq, t[2];
