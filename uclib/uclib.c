@@ -15,5 +15,6 @@
 #include <uclib/fifo.c>
 #include <uclib/hash.c>
 #include <uclib/heap.c>
+#include <uclib/mhash.c>
 #include <uclib/serialize.c>
 #include <uclib/time.c>
