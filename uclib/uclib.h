@@ -200,6 +200,7 @@ always_inline uword max_pow2 (uword x)
 #include <uclib/mhash.h>
 #include <uclib/pool.h>
 #include <uclib/serialize.h>
+#include <uclib/sparse_vec.h>
 
 #include <uclib/elog.h>
 
