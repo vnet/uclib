@@ -174,6 +174,7 @@ always_inline uword max_pow2 (uword x)
 
 #include <uclib/bitops.h>
 #include <uclib/bitmap.h>
+#include <uclib/fifo.h>
 #include <uclib/hash.h>
 #include <uclib/pool.h>
 

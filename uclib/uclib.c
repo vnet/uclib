@@ -3,6 +3,7 @@
 #include <uclib/std-formats.c>
 #include <uclib/unformat.c>
 #include <uclib/error.c>
+#include <uclib/fifo.c>
 #include <uclib/os.c>
 #include <uclib/vec.c>
 #include <uclib/hash.c>
