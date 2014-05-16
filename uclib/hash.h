@@ -148,8 +148,8 @@ typedef struct {
 
 /* Direct / Indirect pair union */
 typedef union {
-    hash_pair_t direct;
-    hash_pair_indirect_t indirect;
+    hash_pair_t hash_pair_direct;
+    hash_pair_indirect_t hash_pair_indirect;
 } hash_pair_union_t;
 
 #define LOG2_ALLOC_BITS (5)
@@ -310,12 +310,12 @@ do {                                                                        \
       do {                                                                  \
         if (_id & 1)                                                        \
           {                                                                 \
-            _q = &_p->direct;                                               \
+            _q = &_p->hash_pair_direct;                                     \
             _q_end = _q + _pair_increment;                                  \
           }                                                                 \
         else                                                                \
           {                                                                 \
-            hash_pair_indirect_t * _pi = &_p->indirect;                     \
+            hash_pair_indirect_t * _pi = &_p->hash_pair_indirect;           \
             _q = _pi->pairs;                                                \
             if (_h->log2_pair_size > 0)                                     \
               _q_end = hash_forward (_h, _q, indirect_pair_get_len (_pi));  \
@@ -338,7 +338,7 @@ do {                                                                        \
             _q += _pair_increment;                                          \
           }                                                                 \
                                                                             \
-        _p = (hash_pair_union_t *) (&_p->direct + _pair_increment);         \
+        _p = (hash_pair_union_t *) (&_p->hash_pair_direct + _pair_increment); \
         _id = _id / 2;                                                      \
         _i++;                                                               \
       } while (_i < _i1);                                                   \

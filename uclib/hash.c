@@ -318,7 +318,7 @@ set_indirect_is_user (void * v,
 {
   hash_t * h = hash_header (v);
   hash_pair_t * q;
-  hash_pair_indirect_t * pi = &p->indirect;
+  hash_pair_indirect_t * pi = &p->hash_pair_indirect;
   uword log2_bytes = 0;
 
   if (h->log2_pair_size == 0)
@@ -328,7 +328,7 @@ set_indirect_is_user (void * v,
       log2_bytes = 1 + hash_pair_log2_bytes (h);
       q = clib_mem_alloc (1 << log2_bytes);
     }
-  memcpy (q, &p->direct, hash_pair_bytes (h));
+  memcpy (q, &p->hash_pair_direct, hash_pair_bytes (h));
 
   pi->pairs = q;
   if (h->log2_pair_size > 0)
@@ -390,7 +390,7 @@ static void unset_indirect (void * v, uword i, hash_pair_t * q)
   hash_t * h = hash_header (v);
   hash_pair_union_t * p = get_pair (v, i);
   hash_pair_t * e;
-  hash_pair_indirect_t * pi = &p->indirect;
+  hash_pair_indirect_t * pi = &p->hash_pair_indirect;
   uword len, is_vec;
 
   is_vec = h->log2_pair_size == 0;
@@ -412,7 +412,7 @@ static void unset_indirect (void * v, uword i, hash_pair_t * q)
 	  set_is_user (v, i, 1);
 	}
       else
-	hash_zero_pair (h, &p->direct);
+	hash_zero_pair (h, &p->hash_pair_direct);
 
       if (is_vec)
 	vec_free (r);
@@ -457,15 +457,15 @@ static hash_pair_t * lookup (void * v, uword key, enum lookup_opcode op,
 
   if (hash_is_user (v, i))
     {
-      found_key = key_equal (h, p->direct.key, key);
+      found_key = key_equal (h, p->hash_pair_direct.key, key);
       if (found_key)
 	{
 	  if (op == UNSET)
 	    {
 	      set_is_user (v, i, 0);
 	      if (old_value)
-		memcpy (old_value, p->direct.value, hash_value_bytes (h));
-	      hash_zero_pair (h, &p->direct);
+		memcpy (old_value, p->hash_pair_direct.value, hash_value_bytes (h));
+	      hash_zero_pair (h, &p->hash_pair_direct);
 	    }
 	}
       else
@@ -478,13 +478,13 @@ static hash_pair_t * lookup (void * v, uword key, enum lookup_opcode op,
     }
   else
     {
-      hash_pair_indirect_t * pi = &p->indirect;
+      hash_pair_indirect_t * pi = &p->hash_pair_indirect;
 
       if (op == SET)
 	{
 	  if (! pi->pairs)
 	    {
-	      p->direct.key = key;
+	      p->hash_pair_direct.key = key;
 	      set_is_user (v, i, 1);
 	    }
 	  else
@@ -497,9 +497,9 @@ static hash_pair_t * lookup (void * v, uword key, enum lookup_opcode op,
 	  if (found_key && op == UNSET)
 	    {
 	      if (old_value)
-		memcpy (old_value, &p->direct.value, hash_value_bytes (h));
+		memcpy (old_value, &p->hash_pair_direct.value, hash_value_bytes (h));
 
-	      unset_indirect (v, i, &p->direct);
+	      unset_indirect (v, i, &p->hash_pair_direct);
 
 	      /* Nullify p (since it's just been deleted).
 		 Otherwise we might be tempted to play with it. */
@@ -512,8 +512,8 @@ static hash_pair_t * lookup (void * v, uword key, enum lookup_opcode op,
     {
       /* Save away old value for caller. */
       if (old_value && found_key)
-	memcpy (old_value, &p->direct.value, hash_value_bytes (h));
-      memcpy (&p->direct.value, new_value, hash_value_bytes (h));
+	memcpy (old_value, &p->hash_pair_direct.value, hash_value_bytes (h));
+      memcpy (&p->hash_pair_direct.value, new_value, hash_value_bytes (h));
     }
 
   if (op == SET)
@@ -521,7 +521,7 @@ static hash_pair_t * lookup (void * v, uword key, enum lookup_opcode op,
   if (op == UNSET)
     h->elts -= found_key;
 
-  return &p->direct;
+  return &p->hash_pair_direct;
 }
 
 /* Fetch value of key. */
@@ -679,9 +679,9 @@ void * _hash_free (void * v)
 	continue;
       p = get_pair (v, i);
       if (h->log2_pair_size == 0)
-	vec_free (p->indirect.pairs);
-      else if (p->indirect.pairs)
-	clib_mem_free (p->indirect.pairs);
+	vec_free (p->hash_pair_indirect.pairs);
+      else if (p->hash_pair_indirect.pairs)
+	clib_mem_free (p->hash_pair_indirect.pairs);
     }
 
   vec_free_header (h);
@@ -870,9 +870,9 @@ uword hash_bytes (void * v)
 	{
 	  hash_pair_union_t * p = get_pair (v, i);
 	  if (h->log2_pair_size > 0)
-	    bytes += 1<< indirect_pair_get_log2_bytes (&p->indirect);
+	    bytes += 1<< indirect_pair_get_log2_bytes (&p->hash_pair_indirect);
 	  else
-	    bytes += vec_capacity (p->indirect.pairs, 0);
+	    bytes += vec_capacity (p->hash_pair_indirect.pairs, 0);
 	}
     }
   return bytes;
@@ -906,9 +906,9 @@ u8 * format_hash (u8 * s, va_list * va)
 	  {
 	    hash_pair_union_t * p = get_pair (v, i);
 	    if (h->log2_pair_size > 0)
-	      j = indirect_pair_get_len (&p->indirect);
+	      j = indirect_pair_get_len (&p->hash_pair_indirect);
 	    else
-	      j = vec_len (p->indirect.pairs);
+	      j = vec_len (p->hash_pair_indirect.pairs);
 	  }
 
 	vec_validate (occupancy, j);
