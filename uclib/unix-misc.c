@@ -89,7 +89,7 @@ clib_error_t * unix_file_read_contents (char * file, u8 * result, uword n_bytes)
 
 clib_error_t * unix_file_contents (char * file, u8 ** result)
 {
-  uword n_bytes;
+  uword n_bytes = 0;
   clib_error_t * error = 0;
   u8 * v;
 
