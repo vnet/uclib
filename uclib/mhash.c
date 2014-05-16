@@ -234,7 +234,7 @@ typedef struct {
 uword mhash_set_mem (mhash_t * h, void * key, uword * new_value, uword * old_value)
 {
   u8 * k;
-  uword ikey, i, l, n_key_bytes, old_n_elts, key_alloc_from_free_list = 0;
+  uword ikey, i, l = 0, n_key_bytes, old_n_elts, key_alloc_from_free_list = 0;
 
   mhash_sanitize_hash_user (h);
 
