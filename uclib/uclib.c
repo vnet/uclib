@@ -11,7 +11,9 @@
 #include <uclib/std-formats.c>
 #include <uclib/unformat.c>
 
+#include <uclib/elog.c>
 #include <uclib/fifo.c>
 #include <uclib/hash.c>
 #include <uclib/heap.c>
 #include <uclib/serialize.c>
+#include <uclib/time.c>

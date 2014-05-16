@@ -115,17 +115,13 @@ always_inline u64 clib_cpu_time_now (void)
 #include <time.h>
 #include <sys/time.h>
 
-#ifdef __MACH__
-#include <mach/clock.h>
-#include <mach/mach.h>
-#endif
-
-
-
 always_inline void
 unix_time_now_timespec (struct timespec * ts)
 {
 #ifdef __MACH__ // OS X does not have clock_gettime, use clock_get_time
+#include <mach/clock.h>
+#include <mach/mach.h>
+
   clock_serv_t cclock;
   mach_timespec_t mts;
   host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
@@ -172,5 +168,38 @@ always_inline void unix_sleep (f64 dt)
   t.tv_nsec = 1e9 * dt;
   nanosleep (&t, 0);
 }
+
+typedef struct {
+  /* Total run time in clock cycles
+     since clib_time_init call. */
+  u64 total_cpu_time;
+
+  /* Last recorded time stamp. */
+  u64 last_cpu_time;
+
+  /* CPU clock frequency. */
+  f64 clocks_per_second;
+
+  /* 1 / cpu clock frequency: conversion factor
+     from clock cycles into seconds. */
+  f64 seconds_per_clock;
+
+  /* Time stamp of call to clib_time_init call. */
+  u64 init_cpu_time;
+} clib_time_t;
+
+always_inline f64
+clib_time_now (clib_time_t * c)
+{
+  u64 n = clib_cpu_time_now ();
+  u64 l = c->last_cpu_time;
+  u64 t = c->total_cpu_time;
+  t += n - l;
+  c->total_cpu_time = t;
+  c->last_cpu_time = n;
+  return t * c->seconds_per_clock;
+}
+
+void clib_time_init (clib_time_t * c);
 
 #endif /* included_time_h */

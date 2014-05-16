@@ -22,6 +22,17 @@
 #define CLIB_PACKED(x)	x __attribute__ ((packed))
 #define CLIB_UNUSED(x)	x __attribute__ ((unused)) 
 
+/* Reserved (unused) structure element with address offset between
+   from and to. */
+#define CLIB_PAD_FROM_TO(from,to) u8 pad_##from[(to) - (from)]
+
+/* Hints to compiler about hot/cold code. */
+#define PREDICT_FALSE(x) __builtin_expect((x),0)
+#define PREDICT_TRUE(x) __builtin_expect((x),1)
+
+/* Full memory barrier (read and write). */
+#define CLIB_MEMORY_BARRIER() __sync_synchronize ()
+
 #ifndef CLIB_DEBUG
 #define CLIB_DEBUG 0
 #endif
@@ -70,10 +81,6 @@ typedef unsigned long u64;
 
 typedef unsigned long clib_address_t;
 
-/* Floating point types. */
-typedef double f64;
-typedef float f32;
-
 /* Word types. */
 
 /* #ifdef's above define log2_uword_bits. */
@@ -92,6 +99,19 @@ pointer_to_uword (void * p)
 { return (uword) p; }
 
 #define uword_to_pointer(u,type) ((type) (uword) (u))
+
+/* Floating point types. */
+typedef double f64;
+typedef float f32;
+
+always_inline f64 flt_round_down (f64 x)
+{ return (int) x; }
+
+always_inline word flt_round_nearest (f64 x)
+{ return (word) (x + .5); }
+
+always_inline f64 flt_round_to_multiple (f64 x, f64 f)
+{ return f * flt_round_nearest (x / f); }
 
 always_inline uword pow2_mask (uword x)
 { return ((uword) 1 << x) - (uword) 1; }
@@ -179,5 +199,7 @@ always_inline uword max_pow2 (uword x)
 #include <uclib/heap.h>
 #include <uclib/pool.h>
 #include <uclib/serialize.h>
+
+#include <uclib/elog.h>
 
 #endif /* included_uclib_h */

@@ -396,13 +396,11 @@ void * serialize_close_vector (serialize_main_t * m);
 
 void unserialize_open_vector (serialize_main_t * m, u8 * vector);
 
-#ifdef CLIB_UNIX
 clib_error_t * serialize_open_unix_file (serialize_main_t * m, char * file);
 clib_error_t * unserialize_open_unix_file (serialize_main_t * m, char * file);
 
 void serialize_open_unix_file_descriptor (serialize_main_t * m, int fd);
 void unserialize_open_unix_file_descriptor (serialize_main_t * m, int fd);
-#endif /* CLIB_UNIX */
 
 #define SERIALIZE_END_OF_STREAM_ERROR (uword_to_pointer (1, clib_error_t *))
 
