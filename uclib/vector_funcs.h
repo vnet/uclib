@@ -24,8 +24,6 @@
 #ifndef included_vector_funcs_h
 #define included_vector_funcs_h
 
-#include <clib/byte_order.h>
-
 /* Addition/subtraction. */
 #if CLIB_VECTOR_WORD_BITS == 128
 #define u8x_add u8x16_add
