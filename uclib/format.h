@@ -66,6 +66,7 @@ _ (format_hex_bytes);
 _ (format_white_space);
 _ (format_f64);
 _ (format_time_interval);
+_ (format_clib_mem_usage);
 
 #undef _
 

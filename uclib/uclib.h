@@ -34,6 +34,8 @@
 #define static_always_inline static inline __attribute__ ((__always_inline__))
 #endif
 
+#define never_inline __attribute__ ((__noinline__))
+
 /* Define signed and unsigned 8, 16, 32, and 64 bit types
    and machine signed/unsigned word for all architectures. */
 typedef char i8;
@@ -65,6 +67,8 @@ typedef unsigned long u64;
 #else
 #error "can't define types"
 #endif
+
+typedef unsigned long clib_address_t;
 
 /* Floating point types. */
 typedef double f64;
@@ -104,12 +108,20 @@ always_inline uword first_set (uword x)
 { return x & -x; }
 
 always_inline uword log2_first_set (uword x)
-{ return __builtin_ctz (x); }
+{ return __builtin_ctzl (x); }
 
 always_inline uword min_log2 (uword x)
 {
-  uword n = __builtin_clz (x);
+  uword n = __builtin_clzl (x);
   return BITS (uword) - n - 1;
+}
+
+always_inline uword max_log2 (uword x)
+{
+  uword l = min_log2 (x);
+  if (x > ((uword) 1 << l))
+    l++;
+  return l;
 }
 
 always_inline uword max_pow2 (uword x)
@@ -140,14 +152,29 @@ always_inline uword max_pow2 (uword x)
 })
 
 #include <uclib/os.h>
-#include <uclib/error.h>
+#include <uclib/cache.h>
+#include <uclib/error_bootstrap.h>
+#include <uclib/smp.h>
+
+#include <uclib/vec_bootstrap.h>
+#include <uclib/mheap_bootstrap.h>
+
 #include <uclib/mem.h>
+#include <uclib/error.h>
+#include <uclib/mheap.h>
 #include <uclib/vec.h>
+
+#include <uclib/time.h>
+
+#include <uclib/vm_unix.h>
+#include <uclib/mheap.h>
+
+#include <uclib/byte_order.h>
+#include <uclib/format.h>
 
 #include <uclib/bitops.h>
 #include <uclib/bitmap.h>
+#include <uclib/hash.h>
 #include <uclib/pool.h>
-
-#include <uclib/format.h>
 
 #endif /* included_uclib_h */

@@ -7,7 +7,7 @@ void * vec_resize_allocate_memory (void * v,
 				   uword header_bytes,
 				   uword data_align)
 {
-  vec_header_t * vh = _vec_get_header (v);
+  vec_header_t * vh = _vec_find (v);
   uword old_alloc_bytes, new_alloc_bytes;
   uword old_data_bytes, new_data_bytes;
   void * old, * new;

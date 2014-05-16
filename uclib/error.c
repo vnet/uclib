@@ -24,6 +24,50 @@
 /* Error reporting. */
 #include <stdarg.h>
 
+#include <unistd.h>		/* for write */
+#include <stdio.h>		/* for printf */
+#define HAVE_ERRNO
+
+typedef struct {
+  clib_error_handler_func_t * func;
+  void * arg;
+} clib_error_handler_t;
+
+static clib_error_handler_t * handlers = 0;
+
+void clib_error_register_handler (clib_error_handler_func_t func, void * arg)
+{
+  clib_error_handler_t h = { func: func, arg: arg, };
+  vec_add1 (handlers, h);
+}
+
+static void debugger (void)
+{
+  os_panic ();
+}
+
+static void error_exit (int code)
+{
+  os_exit (code);
+}
+
+static u8 * dispatch_message (u8 * msg)
+{
+  word i;
+
+  if (! msg)
+    return msg;
+
+  for (i = 0; i < vec_len (handlers); i++)
+    handlers[i].func (handlers[i].arg, msg, vec_len (msg));
+
+  /* If no message handler is specified provide a default one. */
+  if (vec_len (handlers) == 0)
+    os_puts (msg, vec_len (msg), /* is_error */ 1);
+
+  return msg;
+}
+
 void _clib_error (int how_to_die,
 		  char * function_name,
 		  uword line_number,
@@ -52,18 +96,18 @@ void _clib_error (int how_to_die,
   if (vec_end (msg)[-1] != '\n')
     vec_add1 (msg, '\n');
 
-  os_puts (msg, vec_len (msg), /* is_error */ 1);
+  msg = dispatch_message (msg);
 
   vec_free (msg);
 
   if (how_to_die & CLIB_ERROR_ABORT)
-    os_panic ();
+    debugger ();
   if (how_to_die & CLIB_ERROR_FATAL)
-    os_panic ();
+    error_exit (1);
 }
 
 clib_error_t * _clib_error_return (clib_error_t * errors,
-                                   uword code,
+                                   word code,
                                    uword flags,
                                    char * where,
 				   char * fmt, ...)
@@ -134,28 +178,19 @@ u8 * format_clib_error (u8 * s, va_list * va)
   return s;
 }
 
-void * clib_error_free (clib_error_t * errors)
-{
-  clib_error_t * e;
-  vec_foreach (e, errors)
-    vec_free (e->what);
-  vec_free (errors);
-  return 0;
-}
-
 clib_error_t * _clib_error_report (clib_error_t * errors)
 {
   if (errors)
     {
       u8 * msg = format (0, "%U", format_clib_error, errors);
 
-      os_puts (msg, vec_len (msg), /* is_error */ 1);
+      msg = dispatch_message (msg);
       vec_free (msg);
 
       if (errors->flags & CLIB_ERROR_ABORT)
-	os_panic ();
+	debugger ();
       if (errors->flags & CLIB_ERROR_FATAL)
-	os_panic ();
+	error_exit (1);
 
       clib_error_free (errors);
     }
