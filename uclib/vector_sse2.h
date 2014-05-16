@@ -49,6 +49,45 @@ always_inline u64x2 u64x2_interleave_hi (u64x2 a, u64x2 b)
 
 always_inline u64x2 u64x2_interleave_lo (u64x2 a, u64x2 b)
 { return (u64x2) __builtin_ia32_punpcklqdq128 ((i64x2) a, (i64x2) b); }
+
+#else
+
+always_inline u8x16 u8x16_interleave_hi (u8x16 a, u8x16 b)
+{
+  return (u8x16) __builtin_shufflevector (a, b,
+					  0x08, 0x18, 0x09, 0x19, 0x0a, 0x1a, 0x0b, 0x1b,
+					  0x0c, 0x1c, 0x0d, 0x1d, 0x0e, 0x1e, 0x0f, 0x1f);
+}
+
+always_inline u8x16 u8x16_interleave_lo (u8x16 a, u8x16 b)
+{
+  return (u8x16) __builtin_shufflevector (a, b,
+					  0x00, 0x10, 0x01, 0x11, 0x02, 0x12, 0x03, 0x13,
+					  0x04, 0x14, 0x05, 0x15, 0x06, 0x16, 0x07, 0x17);
+}
+
+always_inline u16x8 u16x8_interleave_hi (u16x8 a, u16x8 b)
+{
+  return (u16x8) __builtin_shufflevector (a, b, 4, 4+8, 5, 5+8, 6, 6+8, 7, 7+8);
+}
+
+always_inline u16x8 u16x8_interleave_lo (u16x8 a, u16x8 b)
+{
+  return (u16x8) __builtin_shufflevector (a, b, 0, 0+8, 1, 1+8, 2, 2+8, 3, 3+8);
+}
+
+always_inline u32x4 u32x4_interleave_hi (u32x4 a, u32x4 b)
+{ return (u8x16) __builtin_shufflevector (a, b, 2, 6, 3, 7); }
+
+always_inline u32x4 u32x4_interleave_lo (u32x4 a, u32x4 b)
+{ return (u8x16) __builtin_shufflevector (a, b, 0, 4, 1, 5); }
+
+always_inline u64x2 u64x2_interleave_hi (u64x2 a, u64x2 b)
+{ return (u64x2) __builtin_shufflevector (a, b, 0, 2); }
+
+always_inline u64x2 u64x2_interleave_lo (u64x2 a, u64x2 b)
+{ return (u64x2) __builtin_shufflevector (a, b, 1, 3); }
+
 #endif
 
 /* 64 bit interleaves. */

@@ -27,12 +27,13 @@
 /* Vector types. */
 
 /* Determine number of bits in vector register. */
+
 #if defined (__AVX2__)
 
+/* AVX only supports 256 bit floating point and does not fully support integer operations. */ 
 #define CLIB_VECTOR_WORD_BITS 256
 
-/* AVX only supports 256 bit floating point and does not fully support integer operations. */ 
-#elif defined (__SSE2__) || defined (__AVX__) || defined (__ALTIVEC__)
+#elif defined (__SSE2__) || defined (__AVX__) || defined (__ALTIVEC__) || defined (__ARM_NEON__) || defined (__arm64__)
 
 #define CLIB_VECTOR_WORD_BITS 128
 
