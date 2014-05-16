@@ -175,6 +175,7 @@ always_inline uword max_pow2 (uword x)
 #include <uclib/cache.h>
 #include <uclib/error_bootstrap.h>
 #include <uclib/smp.h>
+#include <uclib/vector.h>
 
 #include <uclib/vec_bootstrap.h>
 #include <uclib/mheap_bootstrap.h>
@@ -204,7 +205,6 @@ always_inline uword max_pow2 (uword x)
 #include <uclib/random_buffer.h>
 #include <uclib/serialize.h>
 #include <uclib/sparse_vec.h>
-#include <uclib/vector.h>
 #include <uclib/zvec.h>
 
 #include <uclib/elog.h>
