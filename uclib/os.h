@@ -3,17 +3,14 @@
 
 #include <stdlib.h>
 
-always_inline void os_panic ()
-{ abort (); }
+void os_panic ();
+void os_exit (int code);
 
-always_inline void os_exit (uword code)
-{ exit (code); }
+/* External function to print a line. */
+void os_puts (u8 * string, uword length, uword is_error);
 
 always_inline uword
 os_get_cpu_number (void)
 { return 0; }
-
-/* External function to print a line. */
-void os_puts (u8 * string, uword length, uword is_error);
 
 #endif /* included_uclib_os_h */

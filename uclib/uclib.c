@@ -1,4 +1,4 @@
-#include <uclib/os.c>
+#include <uclib/unix-misc.c>
 #include <uclib/smp.c>
 #include <uclib/backtrace.c>
 #include <uclib/mheap.c>
@@ -16,8 +16,8 @@
 #include <uclib/hash.c>
 #include <uclib/heap.c>
 #include <uclib/mhash.c>
-#include <uclib/serialize.c>
-#include <uclib/time.c>
-
 #include <uclib/random_isaac.c>
 #include <uclib/random_buffer.c>
+#include <uclib/serialize.c>
+#include <uclib/time.c>
+#include <uclib/zvec.c>

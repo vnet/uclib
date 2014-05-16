@@ -199,13 +199,14 @@ always_inline uword max_pow2 (uword x)
 #include <uclib/heap.h>
 #include <uclib/mhash.h>
 #include <uclib/pool.h>
-#include <uclib/serialize.h>
-#include <uclib/sparse_vec.h>
-
-#include <uclib/elog.h>
-
 #include <uclib/random.h>
 #include <uclib/random_isaac.h>
 #include <uclib/random_buffer.h>
+#include <uclib/serialize.h>
+#include <uclib/sparse_vec.h>
+#include <uclib/zvec.h>
+
+#include <uclib/elog.h>
+
 
 #endif /* included_uclib_h */
