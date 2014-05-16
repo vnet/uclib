@@ -461,16 +461,9 @@ do {						\
      int * int_vec = ...;
      vec_sort (int_vec, i0, i1, i0[0] - i1[0]);
 */
-#define vec_sort(vec,v0,v1,body)					\
-do {									\
-  int _vec_sort_compare (const void * _v0,				\
-			 const void * _v1)				\
-  {									\
-    __typeof__ (vec) v0 = (__typeof__ (vec)) _v0;			\
-    __typeof__ (vec) v1 = (__typeof__ (vec)) _v1;			\
-    return (int) (body);						\
-  }									\
-  qsort (vec, vec_len (vec), sizeof (vec[0]), _vec_sort_compare);	\
+#define vec_sort(vec,cmp_function)				\
+do {								\
+ qsort (vec, vec_len (vec), sizeof (vec[0]), cmp_function);	\
 } while (0)
 
 /* Sort a vector using the supplied element comparison function

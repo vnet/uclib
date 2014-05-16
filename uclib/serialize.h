@@ -158,7 +158,7 @@ serialize_integer (serialize_main_t * m, u64 x, u32 n_bytes)
   else if (n_bytes == 2)
     clib_mem_unaligned (p, u16) = clib_host_to_net_u16 (x);
   else if (n_bytes == 4)
-    clib_mem_unaligned (p, u32) = clib_host_to_net_u32 (x);
+    clib_mem_unaligned (p, u32) = clib_host_to_net_u32 ((u32) x);
   else if (n_bytes == 8)
     clib_mem_unaligned (p, u64) = clib_host_to_net_u64 (x);
   else
@@ -209,7 +209,7 @@ serialize_likely_small_unsigned_integer (serialize_main_t * m, u64 x)
   if (r < (1 << 29))
     {
       p = serialize_get (m, 4);
-      clib_mem_unaligned (p, u32) = clib_host_to_little_u32 (8 * r + 4);
+      clib_mem_unaligned (p, u32) = clib_host_to_little_u32 (8 * (u32) r + 4);
       return;
     }
 

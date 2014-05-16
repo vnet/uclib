@@ -27,8 +27,8 @@ void serialize_64 (serialize_main_t * m, va_list * va)
 {
   u64 x = va_arg (*va, u64);
   u32 lo, hi;
-  lo = x;
-  hi = x >> 32;
+  lo = (u32) x;
+  hi = (u32) (x >> 32);
   serialize_integer (m, lo, sizeof (lo));
   serialize_integer (m, hi, sizeof (hi));
 }
@@ -132,7 +132,7 @@ void unserialize_cstring (serialize_main_t * m, char ** s)
   char * p, * r = 0;
   u32 len;
 
-  len = unserialize_likely_small_unsigned_integer (m);
+  len = (u32) unserialize_likely_small_unsigned_integer (m);
 
   if (len > 0)
     {
@@ -1053,8 +1053,6 @@ unserialize_multiple_4 (serialize_main_t * m,
     }
 }
 
-#ifdef CLIB_UNIX
-
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -1140,5 +1138,3 @@ serialize_open_unix_file (serialize_main_t * m, char * file)
 clib_error_t *
 unserialize_open_unix_file (serialize_main_t * m, char * file)
 { return serialize_open_unix_file_helper (m, file, /* is_read */ 1); }
-
-#endif /* CLIB_UNIX */

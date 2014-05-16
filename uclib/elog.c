@@ -416,7 +416,7 @@ static uword elog_event_range (elog_main_t * em, uword * lo)
   if (i <= (u64) l)
     {
       if (lo) *lo = 0;
-      return i;
+      return (uword) i;
     }
   else
     {
@@ -517,6 +517,11 @@ static void maybe_fix_string_table_offset (elog_event_t * e,
       d += n_bytes;
     }
 }
+
+static int elog_sort_by_event_time (const void * _e1, const void * _e2)
+{
+  const elog_event_t * e1 = _e1, * e2 = _e2;
+  return e1->time < e2->time ? -1 : (e1->time > e2->time ? +1 : 0); }
 
 void elog_merge (elog_main_t * dst, u8 * dst_tag, 
                  elog_main_t * src, u8 * src_tag)
@@ -624,7 +629,7 @@ void elog_merge (elog_main_t * dst, u8 * dst_tag,
   }
 
   /* Sort events by increasing time. */
-  vec_sort (dst->events, e1, e2, e1->time < e2->time ? -1 : (e1->time > e2->time ? +1 : 0));
+  vec_sort (dst->events, elog_sort_by_event_time);
 
   /* Recreate the event ring or the results won't serialize */
   {
