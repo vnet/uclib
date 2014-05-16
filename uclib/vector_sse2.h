@@ -221,16 +221,16 @@ _ (i32x4, i32x4, right, psrad);
 
 #undef _
 
-#define u8x16_word_shift_left(x,n_bytes) \
-  __builtin_ia32_pslldqi128 ((i8x16) (x), (n_bytes))
+#define u8x16_word_shift_left(x,n_bytes)			\
+  ((u8x16) __builtin_ia32_pslldqi128 ((i64x2) (x), (n_bytes)))
 
-#define u8x16_word_shift_right(x,n_bytes) \
-  __builtin_ia32_psrldqi128 ((i8x16) (x), (n_bytes))
+#define u8x16_word_shift_right(x,n_bytes)			\
+  ((u8x16) __builtin_ia32_psrldqi128 ((i64x2) (x), (n_bytes)))
 
 #define i8x16_word_shift_left(a,n)			\
-  ((i8x16) u8x16_word_shift_left((u8x16) (a), (n)))
-#define i8x16_word_shift_right(a,n) \
-  ((i8x16) u8x16_word_shift_right((u8x16) (a), (n)))
+  ((i8x16) u8x16_word_shift_left((i64x2) (a), (n)))
+#define i8x16_word_shift_right(a,n)			\
+  ((i8x16) u8x16_word_shift_right((i64x2) (a), (n)))
 
 #define u16x8_word_shift_left(a,n) \
   ((u16x8) u8x16_word_shift_left((u8x16) (a), (n) * sizeof (u16)))
