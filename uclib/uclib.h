@@ -203,4 +203,8 @@ always_inline uword max_pow2 (uword x)
 
 #include <uclib/elog.h>
 
+#include <uclib/random.h>
+#include <uclib/random_isaac.h>
+#include <uclib/random_buffer.h>
+
 #endif /* included_uclib_h */

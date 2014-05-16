@@ -18,3 +18,6 @@
 #include <uclib/mhash.c>
 #include <uclib/serialize.c>
 #include <uclib/time.c>
+
+#include <uclib/random_isaac.c>
+#include <uclib/random_buffer.c>
