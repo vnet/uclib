@@ -8,6 +8,12 @@ int main (int argc, char * argv[])
   } foo_t;
   foo_t * pool = 0, * p;
 
+  {
+    clib_time_t ct;
+    clib_time_init (&ct);
+    clib_warning ("cpu freq %.6e", ct.clocks_per_second);
+  }
+
   pool_get (pool, p);
 
   p->a = p->b = 1;
