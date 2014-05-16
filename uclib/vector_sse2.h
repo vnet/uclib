@@ -385,6 +385,10 @@ always_inline u32x4 u32x4_is_zero (u32x4 x)
 		      | ((i) << (2*2))		\
 		      | ((i) << (2*3))))
 
+/* Converts all ones/zeros compare mask to bitmap. */
+always_inline u32 u8x16_compare_byte_mask (u8x16 x)
+{ return __builtin_ia32_pmovmskb128 ((i8x16) x); }
+
 #undef _signed_binop
 
 #endif /* included_vector_sse2_h */
