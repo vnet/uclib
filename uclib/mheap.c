@@ -240,7 +240,7 @@ mheap_small_object_cache_mask (mheap_small_object_cache_t * c, uword bin)
 {
   uword mask;
 
-#ifndef CLIB_HAVE_VEC128
+#if CLIB_VECTOR_WORD_BITS < 128
   mask = 0;
 #else
   u8x16 b = u8x16_splat (bin);
@@ -877,7 +877,7 @@ void * mheap_alloc (void * memory, uword size)
   if (memory != 0)
     flags |= MHEAP_FLAG_DISABLE_VM;
 
-#ifdef CLIB_HAVE_VEC128
+#if CLIB_VECTOR_WORD_BITS >= 128
   flags |= MHEAP_FLAG_SMALL_OBJECT_CACHE;
 #endif
 
