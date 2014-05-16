@@ -199,78 +199,6 @@ always_inline u32x u32x_splat (u32 a)
 #endif
 }
 
-always_inline u64x2 u64x2_read_lo (u64x2 x, u64 * a)
-{ return (u64x2) __builtin_ia32_loadlps ((f32x4) x, (void *) a); }
-
-always_inline u64x2 u64x2_read_hi (u64x2 x, u64 * a)
-{ return (u64x2) __builtin_ia32_loadhps ((f32x4) x, (void *) a); }
-
-always_inline void u64x2_write_lo (u64x2 x, u64 * a)
-{ __builtin_ia32_storehps ((void *) a, (f32x4) x); }
-
-always_inline void u64x2_write_hi (u64x2 x, u64 * a)
-{ __builtin_ia32_storelps ((void *) a, (f32x4) x); }
-
-/* Unaligned loads/stores. */
-
-#define _(t)						\
-  always_inline void t##_store_unaligned (t x, t * a)	\
-  { __builtin_ia32_storedqu ((char *) a, (i8x16) x); }	\
-  always_inline t t##_load_unaligned (t * a)		\
-  { return (t) __builtin_ia32_loaddqu ((char *) a); }
-
-_ (u8x16)
-_ (u16x8)
-_ (u32x4)
-_ (u64x2)
-_ (i8x16)
-_ (i16x8)
-_ (i32x4)
-_ (i64x2)
-
-#undef _
-
-#define _signed_binop(n,m,f,g)						\
-  /* Unsigned */							\
-  always_inline u##n##x##m						\
-  u##n##x##m##_##f (u##n##x##m x, u##n##x##m y)				\
-  { return (u##n##x##m) __builtin_ia32_##g ((i##n##x##m) x, (i##n##x##m) y); } \
-									\
-  /* Signed */								\
-  always_inline i##n##x##m						\
-  i##n##x##m##_##f (i##n##x##m x, i##n##x##m y)				\
-  { return (i##n##x##m) __builtin_ia32_##g ((i##n##x##m) x, (i##n##x##m) y); }
-
-/* Addition/subtraction. */
-_signed_binop (8,  16, add, paddb128)
-_signed_binop (16,  8, add, paddw128)
-_signed_binop (32,  4, add, paddd128)
-_signed_binop (64,  2, add, paddq128)
-_signed_binop (8,  16, sub, psubb128)
-_signed_binop (16,  8, sub, psubw128)
-_signed_binop (32,  4, sub, psubd128)
-_signed_binop (64,  2, sub, psubq128)
-
-/* Addition/subtraction with saturation. */
-
-_signed_binop (8, 16, add_saturate, paddusb128)
-_signed_binop (16, 8, add_saturate, paddusw128)
-_signed_binop (8, 16, sub_saturate, psubusb128)
-_signed_binop (16, 8, sub_saturate, psubusw128)
-
-/* Multiplication. */
-always_inline i16x8 i16x8_mul_lo (i16x8 x, i16x8 y)
-{ return __builtin_ia32_pmullw128 (x, y); }
-
-always_inline u16x8 u16x8_mul_lo (u16x8 x, u16x8 y)
-{ return (u16x8) __builtin_ia32_pmullw128 ((i16x8) x, (i16x8) y); }
-
-always_inline i16x8 i16x8_mul_hi (i16x8 x, i16x8 y)
-{ return (i16x8) __builtin_ia32_pmulhuw128 ((i16x8) x, (i16x8) y); }
-
-always_inline u16x8 u16x8_mul_hi (u16x8 x, u16x8 y)
-{ return (u16x8) __builtin_ia32_pmulhuw128 ((i16x8) x, (i16x8) y); }
-
 /* 128 bit shifts. */
 #define _(t,ti,lr,f)						\
   always_inline t t##_ishift_##lr (t x, int i)			\
@@ -293,49 +221,13 @@ _ (i32x4, i32x4, right, psrad);
 
 #undef _
 
-/* 64 bit shifts. */
-#if __GNUC__ >= 4 && __GNUC_MINOR__ >= 4
-#define _(t,ti,lr,f)				\
-  always_inline t			\
-  t##_shift_##lr (t x, t i)			\
-  { return (t) __builtin_ia32_##f ((ti) x, (ti) i); }
-#else
-#define _(t,ti,lr,f)				\
-  always_inline t			\
-  t##_shift_##lr (t x, t i)			\
-  { return (t) __builtin_ia32_##f ((ti) x, (i64) i); }
-#endif
+#define u8x16_word_shift_left(x,n_bytes) \
+  __builtin_ia32_pslldqi128 ((i8x16) (x), (n_bytes))
 
-_ (u16x4, i16x4, left, psllw);
-_ (u32x2, i32x2, left, pslld);
-_ (u16x4, i16x4, right, psrlw);
-_ (u32x2, i32x2, right, psrld);
-_ (i16x4, i16x4, left, psllw);
-_ (i32x2, i32x2, left, pslld);
-_ (i16x4, i16x4, right, psraw);
-_ (i32x2, i32x2, right, psrad);
+#define u8x16_word_shift_right(x,n_bytes) \
+  __builtin_ia32_psrldqi128 ((i8x16) (x), (n_bytes))
 
-#undef _
-
-#define u8x16_word_shift_left(a,n)				\
-({								\
-  u8x16 _r = (a);						\
-  asm volatile ("pslldq %[n_bytes], %[r]"			\
-		: /* outputs */ [r] "=x" (_r)			\
-		: /* inputs */ "0" (_r), [n_bytes] "i" (n));	\
-  _r;								\
-})
-
-#define u8x16_word_shift_right(a,n)				\
-({								\
-  u8x16 _r = (a);						\
-  asm volatile ("psrldq %[n_bytes], %[r]"			\
-		: /* outputs */ [r] "=x" (_r)			\
-		: /* inputs */ "0" (_r), [n_bytes] "i" (n));	\
-  _r;								\
-})
-
-#define i8x16_word_shift_left(a,n) \
+#define i8x16_word_shift_left(a,n)			\
   ((i8x16) u8x16_word_shift_left((u8x16) (a), (n)))
 #define i8x16_word_shift_right(a,n) \
   ((i8x16) u8x16_word_shift_right((u8x16) (a), (n)))
@@ -367,6 +259,18 @@ _ (i32x2, i32x2, right, psrad);
 #define i64x2_word_shift_right(a,n) \
   ((i64x2) u8x16_word_shift_right((u8x16) (a), (n) * sizeof (u64)))
 
+#define _signed_binop(n,m,f,g)						\
+  /* Unsigned */							\
+  always_inline u##n##x##m						\
+  u##n##x##m##_##f (u##n##x##m x, u##n##x##m y)				\
+  { return (u##n##x##m) __builtin_ia32_##g ((i##n##x##m) x, (i##n##x##m) y); } \
+									\
+  /* Signed */								\
+  always_inline i##n##x##m						\
+  i##n##x##m##_##f (i##n##x##m x, i##n##x##m y)				\
+  { return (i##n##x##m) __builtin_ia32_##g ((i##n##x##m) x, (i##n##x##m) y); }
+
+#ifndef __clang__
 #define _(t,n,lr1,lr2)						\
   always_inline t##x##n						\
   t##x##n##_word_rotate2_##lr1 (t##x##n w0, t##x##n w1, int i)	\
@@ -391,8 +295,12 @@ _ (u64, 2, left, right);
 _ (u64, 2, right, left);
 
 #undef _
+#endif
 
 /* Compare operations. */
+
+#ifndef __clang__
+
 _signed_binop (8, 16, is_equal, pcmpeqb128)
 _signed_binop (16, 8, is_equal, pcmpeqw128)
 _signed_binop (32, 4, is_equal, pcmpeqd128)
@@ -408,6 +316,40 @@ i16x8_is_greater (i16x8 x, i16x8 y)
 always_inline u32x4
 i32x4_is_greater (i32x4 x, i32x4 y)
 { return (u32x4) __builtin_ia32_pcmpgtd128 (x, y); }
+
+#else
+
+always_inline i8x16 i8x16_is_equal (i8x16 x, i8x16 y)
+{ return x == y; }
+always_inline i16x8 i16x8_is_equal (i16x8 x, i16x8 y)
+{ return x == y; }
+always_inline i32x4 i32x4_is_equal (i32x4 x, i32x4 y)
+{ return x == y; }
+always_inline i64x2 i64x2_is_equal (i64x2 x, i64x2 y)
+{ return x == y; }
+
+always_inline u8x16 u8x16_is_equal (u8x16 x, u8x16 y)
+{ return x == y; }
+always_inline u16x8 u16x8_is_equal (u16x8 x, u16x8 y)
+{ return x == y; }
+always_inline u32x4 u32x4_is_equal (u32x4 x, u32x4 y)
+{ return x == y; }
+always_inline u64x2 u64x2_is_equal (u64x2 x, u64x2 y)
+{ return x == y; }
+
+always_inline u8x16
+i8x16_is_greater (i8x16 x, i8x16 y)
+{ return x > y; }
+
+always_inline u16x8
+i16x8_is_greater (i16x8 x, i16x8 y)
+{ return x > y; }
+
+always_inline u32x4
+i32x4_is_greater (i32x4 x, i32x4 y)
+{ return x > y; }
+
+#endif
 
 always_inline u8x16 u8x16_is_zero (u8x16 x)
 {
@@ -442,116 +384,6 @@ always_inline u32x4 u32x4_is_zero (u32x4 x)
 		      | ((i) << (2*1))		\
 		      | ((i) << (2*2))		\
 		      | ((i) << (2*3))))
-
-/* No built in function for pextrw. */
-#define u16x8_extract(x,i) __builtin_ia32_vec_ext_v8hi (x, i)
-#define i16x8_extract(x,i) __builtin_ia32_vec_ext_v8hi (x, i)
-
-/* Extract low order 32 bit word. */
-always_inline u32
-u32x4_get0 (u32x4 x)
-{
-  u32 result;
-  asm volatile ("movd %[x], %[result]"
-		: /* outputs */ [result] "=r" (result)
-		: /* inputs */ [x] "x" (x));
-  return result;
-}
-
-always_inline u32x4
-u32x4_set0 (u32 x)
-{
-  u32x4 result;
-  asm volatile ("movd %[x], %[result]"
-		: /* outputs */ [result] "=x" (result)
-		: /* inputs */ [x] "r" (x));
-  return result;
-}
-
-always_inline i32x4
-i32x4_set0 (i32 x)
-{ return (i32x4) u32x4_set0 ((u32) x); }
-
-always_inline i32
-i32x4_get0 (i32x4 x)
-{ return (i32) u32x4_get0 ((u32x4) x); }
-
-/* Converts all ones/zeros compare mask to bitmap. */
-always_inline u32 u8x16_compare_byte_mask (u8x16 x)
-{ return __builtin_ia32_pmovmskb128 ((i8x16) x); }
-
-u8 u32x4_compare_word_mask_table[256];
-
-always_inline u32 u32x4_compare_word_mask (u32x4 x)
-{
-  u32 m = u8x16_compare_byte_mask ((u8x16) x);
-  return (u32x4_compare_word_mask_table[(m >> 0) & 0xff]
-	  | (u32x4_compare_word_mask_table[(m >> 8) & 0xff] << 2));
-}
-
-always_inline u32 u8x16_zero_byte_mask (u8x16 x)
-{
-  u8x16 zero = {0};
-  return u8x16_compare_byte_mask (u8x16_is_equal (x, zero));
-}
-
-always_inline u32 u16x8_zero_byte_mask (u16x8 x)
-{
-  u16x8 zero = {0};
-  return u8x16_compare_byte_mask ((u8x16) u16x8_is_equal (x, zero));
-}
-
-always_inline u32 u32x4_zero_byte_mask (u32x4 x)
-{
-  u32x4 zero = {0};
-  return u8x16_compare_byte_mask ((u8x16) u32x4_is_equal (x, zero));
-}
-
-always_inline u8x16 u8x16_max (u8x16 x, u8x16 y)
-{ return (u8x16) __builtin_ia32_pmaxub128 ((i8x16) x, (i8x16) y); }
-
-always_inline u32 u8x16_max_scalar (u8x16 x)
-{
-  x = u8x16_max (x, u8x16_word_shift_right (x, 8));
-  x = u8x16_max (x, u8x16_word_shift_right (x, 4));
-  x = u8x16_max (x, u8x16_word_shift_right (x, 2));
-  x = u8x16_max (x, u8x16_word_shift_right (x, 1));
-  return u16x8_extract ((i16x8) x, 0) & 0xff;
-}
-
-always_inline u8x16 u8x16_min (u8x16 x, u8x16 y)
-{ return (u8x16) __builtin_ia32_pminub128 ((i8x16) x, (i8x16) y); }
-
-always_inline u8 u8x16_min_scalar (u8x16 x)
-{
-  x = u8x16_min (x, u8x16_word_shift_right (x, 8));
-  x = u8x16_min (x, u8x16_word_shift_right (x, 4));
-  x = u8x16_min (x, u8x16_word_shift_right (x, 2));
-  x = u8x16_min (x, u8x16_word_shift_right (x, 1));
-  return u16x8_extract ((i16x8) x, 0) & 0xff;
-}
-
-always_inline i16x8 i16x8_max (i16x8 x, i16x8 y)
-{ return __builtin_ia32_pmaxsw128 (x, y); }
-
-always_inline i16 i16x8_max_scalar (i16x8 x)
-{
-  x = i16x8_max (x, i16x8_word_shift_right (x, 4));
-  x = i16x8_max (x, i16x8_word_shift_right (x, 2));
-  x = i16x8_max (x, i16x8_word_shift_right (x, 1));
-  return i16x8_extract (x, 0);
-}
-
-always_inline i16x8 i16x8_min (i16x8 x, i16x8 y)
-{ return __builtin_ia32_pminsw128 (x, y); }
-
-always_inline i16 i16x8_min_scalar (i16x8 x)
-{
-  x = i16x8_min (x, i16x8_word_shift_right (x, 4));
-  x = i16x8_min (x, i16x8_word_shift_right (x, 2));
-  x = i16x8_min (x, i16x8_word_shift_right (x, 1));
-  return i16x8_extract (x, 0);
-}
 
 #undef _signed_binop
 
