@@ -36,7 +36,7 @@ clib_error_t * unix_file_n_bytes (char * file, uword * result)
     return clib_error_return_unix (0, "stat `%s'", file);
 
   if (S_ISREG (s.st_mode))
-    *result = s.st_size;
+    *result = (uword) s.st_size;
   else
     *result = 0;
 
