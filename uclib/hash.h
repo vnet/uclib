@@ -466,7 +466,11 @@ hash32_rotate_left (u32 x, u32 i)
 #if CLIB_VECTOR_WORD_BITS > 0
 always_inline u32x
 hash32x_rotate_left (u32x x, u32 i)
-{ return (x << i) | (x >> (BITS (i) - i)); }
+{
+  u32x a = u32x_splat (i);
+  u32x b = u32x_splat (BITS (i) - i);
+  return (x << a) | (x >> b);
+}
 #endif
 
 #define hash_v3_mix32(a,b,c)					\
