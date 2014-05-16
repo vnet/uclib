@@ -113,7 +113,7 @@ always_inline void set_first_free_elt_offset (mheap_t * h, uword bin, uword uoff
 }
 
 always_inline void
-set_free_elt (void * v, uword uoffset, uword n_user_data_bytes)
+mheap_set_free_elt (void * v, uword uoffset, uword n_user_data_bytes)
 {
   mheap_t * h = mheap_header (v);
   mheap_elt_t * e = mheap_elt_at_uoffset (v, uoffset);
@@ -141,7 +141,7 @@ always_inline void
 new_free_elt (void * v, uword uoffset, uword n_user_data_bytes)
 {
   mheap_elt_set_size (v, uoffset, n_user_data_bytes, /* is_free */ 1);
-  set_free_elt (v, uoffset, n_user_data_bytes);
+  mheap_set_free_elt (v, uoffset, n_user_data_bytes);
 }
 
 always_inline void
@@ -768,7 +768,7 @@ void mheap_put (void * v, uword uoffset)
 	mheap_elt_set_size (v, f0, f1 - f0, /* is_free */ 1);
       else
 	e->is_free = n->prev_is_free = 1;
-      set_free_elt (v, f0, f1 - f0);
+      mheap_set_free_elt (v, f0, f1 - f0);
 
       if (! (h->flags & MHEAP_FLAG_DISABLE_VM))
 	mheap_vm_elt (v, MHEAP_VM_UNMAP, f0);
