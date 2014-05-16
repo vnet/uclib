@@ -118,7 +118,7 @@ _ (f64, 2);
 #endif
 
 #if CLIB_VECTOR_WORD_BITS > 0
-#include <clib/vector_funcs.h>
+#include <uclib/vector_funcs.h>
 #endif
 
 #endif /* included_clib_vector_h */
