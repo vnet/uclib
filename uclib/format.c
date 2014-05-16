@@ -105,7 +105,7 @@ static u8 * justify (u8 * s, format_info_t * fi, uword s_len_orig)
   return s;
 }
 
-static u8 * do_percent (u8 ** _s, u8 * fmt, va_list * va)
+static u8 * format_do_percent (u8 ** _s, u8 * fmt, va_list * va)
 {
   u8 * s = *_s;
   uword c;
@@ -113,10 +113,10 @@ static u8 * do_percent (u8 ** _s, u8 * fmt, va_list * va)
   u8 * f = fmt;
 
   format_info_t fi = {
-    justify: '+',
-    width: {0},
-    pad_char: ' ',
-    how_long: 0,
+    .justify = '+',
+    .width = {0},
+    .pad_char = ' ',
+    . how_long = 0,
   };
 
   uword i;
@@ -190,10 +190,10 @@ static u8 * do_percent (u8 ** _s, u8 * fmt, va_list * va)
     {
       uword s_initial_len = vec_len (s);
       format_integer_options_t o = {
-	is_signed: 0,
-	base: 10,
-	n_bits: BITS (uword),
-	uppercase_digits: 0,
+	.is_signed = 0,
+	.base = 10,
+	.n_bits = BITS (uword),
+	.uppercase_digits = 0,
       };
 
       f++;
@@ -348,7 +348,7 @@ u8 * va_format (u8 * s, char * fmt, va_list * va)
 	{
 	  if (f > g)
 	    vec_add (s, g, f - g);
-	  f = g = do_percent (&s, f, va);
+	  f = g = format_do_percent (&s, f, va);
 	}
       else
 	{
@@ -530,7 +530,7 @@ static f64 f64_precision (int base2_expon)
 }
 
 /* Return x 10^n */
-static f64 times_power_of_ten (f64 x, int n)
+f64 format_times_power_of_ten (f64 x, int n)
 {
   if (n >= 0)
     {
@@ -568,8 +568,8 @@ static f64 normalize (f64 x, word * expon_return, f64 * prec_return)
   expon10 = .5 + expon2 * .301029995663981195213738894724493  /* Log (2) / Log (10) */;
   
   prec = f64_precision (expon2);
-  x = times_power_of_ten (x, -expon10);
-  prec = times_power_of_ten (prec, -expon10);
+  x = format_times_power_of_ten (x, -expon10);
+  prec = format_times_power_of_ten (prec, -expon10);
 
   while (x < 1)
     {

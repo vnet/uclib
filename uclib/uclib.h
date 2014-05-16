@@ -75,14 +75,19 @@ typedef float f32;
 /* #ifdef's above define log2_uword_bits. */
 #define uword_bits (1 << log2_uword_bits)
 
+#if log2_uword_bits == 5
+typedef int word;
+typedef unsigned int uword;
+#else
 typedef long word;
 typedef unsigned long uword;
+#endif
 
 always_inline uword
 pointer_to_uword (void * p)
 { return (uword) p; }
 
-#define uword_to_pointer(u,type) ((type) (u))
+#define uword_to_pointer(u,type) ((type) (uword) (u))
 
 always_inline uword pow2_mask (uword x)
 { return ((uword) 1 << x) - (uword) 1; }

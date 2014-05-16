@@ -1,10 +1,30 @@
 #ifndef included_uclib_mem_h
 #define included_uclib_mem_h
 
+#ifdef __APPLE__
+
+#include <stdlib.h>
+#include <malloc/malloc.h>
+
+always_inline uword clib_mem_size (void * v)
+{ return malloc_size ((const void *) v); }
+
+always_inline void * memalign (uword align, uword size)
+{
+  if (align > 16)
+    return valloc (size);
+  else
+    return malloc (size);
+}
+
+#else
+
 #include <malloc.h>
 
 always_inline uword clib_mem_size (void * v)
 { return malloc_usable_size (v); }
+
+#endif
 
 always_inline void clib_mem_free (void * v)
 { free (v); }

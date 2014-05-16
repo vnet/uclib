@@ -264,4 +264,6 @@ int test_unformat_main (unformat_input_t * input);
 int test_standalone_string_main (unformat_input_t * input);
 int test_vec_main (unformat_input_t * input);
 
+f64 format_times_power_of_ten (f64 x, int n);
+
 #endif /* included_format_h */

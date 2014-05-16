@@ -155,7 +155,7 @@ clib_error_t * _clib_error_report (clib_error_t * errors)
       if (errors->flags & CLIB_ERROR_ABORT)
 	os_panic ();
       if (errors->flags & CLIB_ERROR_FATAL)
-	os_panic (1);
+	os_panic ();
 
       clib_error_free (errors);
     }
