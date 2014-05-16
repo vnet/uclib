@@ -121,7 +121,7 @@ _vec_resize (void * v,
 				     old_length,
 				     n_bytes_per_elt,
 				     header_bytes,
-				     uclib_max (sizeof (vec_header_t), data_align));
+				     clib_max (sizeof (vec_header_t), data_align));
 }
 
 uword clib_mem_is_vec_h (void * v, uword header_bytes);

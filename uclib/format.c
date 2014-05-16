@@ -275,7 +275,7 @@ static u8 * format_do_percent (u8 ** _s, u8 * fmt, va_list * va)
 		len = 5;
 	      }
 	    else if (fi.width[1] != 0)
-	      len = uclib_min (strlen (cstring), fi.width[1]);
+	      len = clib_min (strlen (cstring), fi.width[1]);
 	    else
 	      len = strlen (cstring);
 	    
@@ -296,7 +296,7 @@ static u8 * format_do_percent (u8 ** _s, u8 * fmt, va_list * va)
 	    uword len;
 
 	    if (fi.width[1] != 0)
-	      len = uclib_min (vec_len (v), fi.width[1]);
+	      len = clib_min (vec_len (v), fi.width[1]);
 	    else
 	      len = vec_len (v);
 
@@ -662,7 +662,7 @@ format_float (u8 * s, f64 x,
 	{
 	  /* Add decimal point and leading zeros. */
 	  vec_add1 (s, '.');
-	  n_fraction_done = uclib_min (-(expon + 1), n_fraction_digits);
+	  n_fraction_done = clib_min (-(expon + 1), n_fraction_digits);
 	  s = add_some_zeros (s, n_fraction_done);
 	  decimal_point = -n_fraction_done;
 	  added_decimal_point = 1;

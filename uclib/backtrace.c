@@ -47,7 +47,7 @@ clib_backtrace (uword * callers,
       f = f->prev;
       if (! f)
 	goto backtrace_done;
-      if (uclib_abs ((void *) f - (void *) f->prev) > (64*1024))
+      if (clib_abs ((void *) f - (void *) f->prev) > (64*1024))
 	goto backtrace_done;
       if (i >= n_frames_to_skip)
 	callers[i - n_frames_to_skip] = pointer_to_uword (f->return_address);

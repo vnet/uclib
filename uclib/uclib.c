@@ -14,3 +14,4 @@
 #include <uclib/fifo.c>
 #include <uclib/hash.c>
 #include <uclib/heap.c>
+#include <uclib/serialize.c>

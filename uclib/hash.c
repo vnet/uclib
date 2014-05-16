@@ -628,7 +628,7 @@ void * _hash_create (uword elts, hash_t * h_user)
 
   /* Size of hash is power of 2 >= ELTS and larger than
      number of bits in is_user bitmap elements. */
-  elts = uclib_max (elts, BITS (h->is_user[0]));
+  elts = clib_max (elts, BITS (h->is_user[0]));
   elts = 1 << max_log2 (elts);
 
   log2_pair_size = 1;

@@ -47,7 +47,7 @@ user_data_size_to_bin_index (uword n_user_data_bytes)
   word small_bin, large_bin;
 
   /* User size must be at least big enough to hold free elt. */
-  n_user_data_bytes = uclib_max (n_user_data_bytes, MHEAP_MIN_USER_DATA_BYTES);
+  n_user_data_bytes = clib_max (n_user_data_bytes, MHEAP_MIN_USER_DATA_BYTES);
 
   /* Round to words. */
   n_user_data_words = (round_pow2 (n_user_data_bytes, MHEAP_USER_DATA_WORD_BYTES)
@@ -583,7 +583,7 @@ void * mheap_get_aligned (void * v,
 
   cpu_times[0] = clib_cpu_time_now ();
 
-  align = uclib_max (align, STRUCT_SIZE_OF (mheap_elt_t, user_data[0]));
+  align = clib_max (align, STRUCT_SIZE_OF (mheap_elt_t, user_data[0]));
   align = max_pow2 (align);
 
   /* Correct align offset to be smaller than alignment. */
@@ -597,7 +597,7 @@ void * mheap_get_aligned (void * v,
     }
 
   /* Round requested size. */
-  n_user_data_bytes = uclib_max (n_user_data_bytes, MHEAP_MIN_USER_DATA_BYTES);
+  n_user_data_bytes = clib_max (n_user_data_bytes, MHEAP_MIN_USER_DATA_BYTES);
   n_user_data_bytes = round_pow2 (n_user_data_bytes, STRUCT_SIZE_OF (mheap_elt_t, user_data[0]));
 
   if (! v)

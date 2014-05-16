@@ -131,21 +131,21 @@ always_inline uword max_pow2 (uword x)
   return y;
 }
 
-#define uclib_max(x,y)				\
+#define clib_max(x,y)				\
 ({						\
   __typeof__ (x) _x = (x);			\
   __typeof__ (y) _y = (y);			\
   _x > _y ? _x : _y;				\
 })
 
-#define uclib_min(x,y)				\
+#define clib_min(x,y)				\
 ({						\
   __typeof__ (x) _x = (x);			\
   __typeof__ (y) _y = (y);			\
   _x < _y ? _x : _y;				\
 })
 
-#define uclib_abs(x)				\
+#define clib_abs(x)				\
 ({						\
   __typeof__ (x) _x = (x);			\
   _x < 0 ? -_x : _x;				\
@@ -178,5 +178,6 @@ always_inline uword max_pow2 (uword x)
 #include <uclib/hash.h>
 #include <uclib/heap.h>
 #include <uclib/pool.h>
+#include <uclib/serialize.h>
 
 #endif /* included_uclib_h */
