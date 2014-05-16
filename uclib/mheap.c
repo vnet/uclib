@@ -601,7 +601,11 @@ void * mheap_get_aligned (void * v,
   n_user_data_bytes = round_pow2 (n_user_data_bytes, STRUCT_SIZE_OF (mheap_elt_t, user_data[0]));
 
   if (! v)
-    v = mheap_alloc (0, 64 << 20);
+    {
+      v = mheap_alloc (0, 64 << 20);
+      if (! v)
+	os_panic ();
+    }
 
   mheap_maybe_lock (v);
 
