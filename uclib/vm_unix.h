@@ -36,6 +36,9 @@ always_inline void * clib_mem_vm_alloc (uword size)
 #ifdef MAP_ANONYMOUS
   flags |= MAP_ANONYMOUS;
 #endif
+#ifdef MAP_ANON
+  flags |= MAP_ANON;
+#endif
 
   mmap_addr = mmap (0, size, PROT_READ | PROT_WRITE, flags, -1, 0);
   if (mmap_addr == (void *) -1)
