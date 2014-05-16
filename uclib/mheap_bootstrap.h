@@ -124,7 +124,7 @@ typedef struct {
 } mheap_stats_t;
 
 /* Without vector instructions don't bother with small object cache. */
-#ifdef CLIB_HAVE_VEC128
+#if CLIB_VECTOR_WORD_BITS >= 128
 #define MHEAP_HAVE_SMALL_OBJECT_CACHE 1
 #else
 #define MHEAP_HAVE_SMALL_OBJECT_CACHE 0
