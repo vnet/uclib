@@ -167,11 +167,11 @@ typedef struct {
   clib_smp_lock_t * smp_lock;
 
   /* Number of allocated objects. */
-  u64 n_elts;
+  uword n_elts;
 
   /* Maximum size (in bytes) this heap is allowed to grow to.
      Set to ~0 to grow heap (via vec_resize) arbitrarily. */
-  u64 max_size;
+  uword max_size;
 
   uword vm_alloc_offset_from_header;
   uword vm_alloc_size;
