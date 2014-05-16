@@ -117,7 +117,7 @@ get_data (void * data, uword data_bytes, uword is_signed)
   else if (data_bytes == 4)
     return is_signed ? zvec_signed_to_unsigned (*(i32 *) data) : *(u32 *) data;
   else if (data_bytes == 8)
-    return is_signed ? zvec_signed_to_unsigned (*(i64 *) data) : *(u64 *) data;
+    return is_signed ? zvec_signed_to_unsigned ((uword) *(i64 *) data) : (uword) *(u64 *) data;
   else
     {
       os_panic ();
