@@ -19,7 +19,7 @@ int main (int argc, char * argv[])
 
   pool_put_index (pool, 0);
 
-  p = pool_elt_at_index (pool, 0);
+  clib_warning ("ok pool %p", pool);
 
   return 0;
 }
