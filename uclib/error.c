@@ -37,7 +37,7 @@ static clib_error_handler_t * handlers = 0;
 
 void clib_error_register_handler (clib_error_handler_func_t func, void * arg)
 {
-  clib_error_handler_t h = { func: func, arg: arg, };
+  clib_error_handler_t h = { .func = func, .arg = arg, };
   vec_add1 (handlers, h);
 }
 
