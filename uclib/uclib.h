@@ -193,6 +193,7 @@ always_inline uword max_pow2 (uword x)
 #include <uclib/byte_order.h>
 #include <uclib/format.h>
 
+#include <uclib/base64.h>
 #include <uclib/bitops.h>
 #include <uclib/bitmap.h>
 #include <uclib/fifo.h>

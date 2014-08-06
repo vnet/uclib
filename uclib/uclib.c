@@ -11,6 +11,7 @@
 #include <uclib/std-formats.c>
 #include <uclib/unformat.c>
 
+#include <uclib/base64.c>
 #include <uclib/elog.c>
 #include <uclib/fifo.c>
 #include <uclib/hash.c>
