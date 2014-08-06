@@ -209,5 +209,6 @@ always_inline uword max_pow2 (uword x)
 #include <uclib/zvec.h>
 
 #include <uclib/elog.h>
+#include <uclib/unix.h>
 
 #endif /* included_uclib_h */
