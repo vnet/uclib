@@ -204,7 +204,7 @@ unformat_init_cstring (unformat_input_t * input,
                        char * string)
 { unformat_init_string (input, string, strlen (string)); }
 
-/* Setup for unformat of given vector string; vector will be freed by unformat_string. */
+/* Setup for unformat of given vector string; vector will be freed by unformat_free. */
 void unformat_init_vector (unformat_input_t * input,
 			   u8 * vector_string);
 
