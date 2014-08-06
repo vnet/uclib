@@ -78,7 +78,7 @@ always_inline void * clib_mem_vm_map (void * addr, uword size)
   return mmap_addr;
 }
 
-uword clib_mem_get_page_size (void)
+always_inline uword clib_mem_get_page_size (void)
 { return getpagesize (); }
 
 #endif /* included_vm_unix_h */

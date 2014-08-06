@@ -156,7 +156,7 @@ void * clib_mem_init (void * heap, uword size);
 
 void clib_mem_exit (void);
 
-uword clib_mem_get_page_size (void);
+always_inline uword clib_mem_get_page_size (void);
 
 void clib_mem_validate (void);
 
