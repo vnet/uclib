@@ -112,9 +112,6 @@ always_inline u64 clib_cpu_time_now (void)
 #include <sys/resource.h>
 #include <unistd.h>
 
-#include <time.h>
-#include <sys/time.h>
-
 always_inline void
 unix_time_now_timespec (struct timespec * ts)
 {
