@@ -210,5 +210,6 @@ always_inline uword max_pow2 (uword x)
 
 #include <uclib/elog.h>
 #include <uclib/unix.h>
+#include <uclib/url.h>
 
 #endif /* included_uclib_h */

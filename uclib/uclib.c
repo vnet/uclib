@@ -21,4 +21,5 @@
 #include <uclib/random_buffer.c>
 #include <uclib/serialize.c>
 #include <uclib/time.c>
+#include <uclib/url.c>
 #include <uclib/zvec.c>
