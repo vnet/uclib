@@ -35,6 +35,25 @@ void sha1_update (sha1_state_t * s, u8 * data, uword n_bytes);
 void sha1_finalize (sha1_state_t * s, u8 * result);
 void sha1 (u8 * result, u8 * data, uword n_bytes);
 
+typedef struct {
+  u64 n_bytes_processed;
+  u8 partial_block_buffer[64];
+  u32 state[8];
+  u32 is_sha224;
+} sha256_state_t;
+
+void sha256_init (sha256_state_t * s);
+void sha256_update (sha256_state_t * s, u8 * data, uword n_bytes);
+void sha256_finalize (sha256_state_t * s, u8 * result);
+void sha256 (u8 * result, u8 * data, uword n_bytes);
+
+typedef sha256_state_t sha224_state_t;
+
+void sha224_init (sha224_state_t * s);
+void sha224_update (sha224_state_t * s, u8 * data, uword n_bytes);
+void sha224_finalize (sha224_state_t * s, u8 * result);
+void sha224 (u8 * result, u8 * data, uword n_bytes);
+
 always_inline void crypto_zero_memory (void * v, uword n)
 { volatile unsigned char *p = v; while( n-- ) *p++ = 0; }
 
