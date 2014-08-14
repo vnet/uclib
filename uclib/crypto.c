@@ -714,6 +714,7 @@ void sha512_finalize (sha512_state_t * s, u8 * result)
   /* Add number of bits in message at end. */
   {
     u64 n64 = s->n_bytes_processed;
+    *( u8 *) (last_block + n_last_block - 9) = n64 >> (u64) 61;
     *(u64 *) (last_block + n_last_block - 8) = clib_host_to_big_u64 (n64 << 3);
   }
 
