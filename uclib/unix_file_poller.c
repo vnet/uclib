@@ -179,8 +179,8 @@ bsd_kqueue_file_update (unix_file_poller_t * um,
 
   EV_SET (&changes[0], f->file_descriptor, EVFILT_READ,
           update_type == UNIX_FILE_POLLER_FILE_UPDATE_DELETE ? EV_DELETE : EV_ADD,
-          0,
-          f - um->file_pool);
+          0, 0,
+          (void *) (f - um->file_pool));
   changes[1] = changes[0];
   changes[1].filter = EVFILT_WRITE;
 
@@ -201,12 +201,14 @@ bsd_kqueue_input (unix_file_poller_t * um, f64 timeout_in_sec)
   int n_fds_ready;
   struct timespec timeout;
 
-  timeout.ts_sec = timeout_in_sec;
-  timeout.ts_nsec = 1e9*(timeout_in_sec - timeout.ts_sec);
+  timeout.tv_sec = timeout_in_sec;
+  timeout.tv_nsec = 1e9*(timeout_in_sec - timeout.tv_sec);
 
   n_fds_ready = kevent (km->kqueue_fd,
-                        km->kqueue_events,
-                        vec_len (km->kqueue_events),
+                        /* changes */ 0,
+                        /* n_changes */ 0,
+                        km->kevents,
+                        vec_len (km->kevents),
                         &timeout);
 
   if (n_fds_ready < 0)
@@ -219,11 +221,11 @@ bsd_kqueue_input (unix_file_poller_t * um, f64 timeout_in_sec)
     }
 
   km->kevent_waits += 1;
-  em->kevent_files_ready += n_fds_ready;
+  km->kevents_ready += n_fds_ready;
 
-  for (e = km->kqueue_events; e < km->kqueue_events + n_fds_ready; e++)
+  for (e = km->kevents; e < km->kevents + n_fds_ready; e++)
     {
-      u32 i = e->udata;
+      u32 i = pointer_to_uword (e->udata);
       unix_file_poller_file_t * f = pool_elt_at_index (um->file_pool, i);
       clib_error_t * errors[4];
       int n_errors = 0;
@@ -254,10 +256,10 @@ unix_file_poller_init (unix_file_poller_t * um)
   bsd_kqueue_main_t * km = &bsd_kqueue_main;
   
   /* Allocate some events. */
-  vec_resize (km->kqueue_events, 256);
+  vec_resize (km->kevents, 256);
 
-  em->kqueue_fd = kqueue ();
-  if (em->kqueue_fd < 0)
+  km->kqueue_fd = kqueue ();
+  if (km->kqueue_fd < 0)
     return clib_error_return_unix (0, "kqueue");
 
   um->file_update = bsd_kqueue_file_update;
