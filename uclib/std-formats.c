@@ -237,3 +237,61 @@ u8 * format_c_identifier (u8 * s, va_list * va)
 
   return s;
 }
+
+u8 * format_network_port (u8 * s, va_list * args)
+{
+  uword proto = va_arg (*args, uword);
+  uword port = va_arg (*args, uword);
+  return format (s, "%s/%d", proto == IPPROTO_UDP ? "udp" : "tcp", port);
+}
+
+/* Format generic network address: takes two arguments family and address.
+   Assumes network byte order. */
+u8 * format_network_address (u8 * s, va_list * args)
+{
+  uword family = va_arg (*args, uword);
+  u8 * addr    = va_arg (*args, u8 *);
+
+  switch (family)
+    {
+    case AF_INET:
+      s = format (s, "%d.%d.%d.%d", addr[0], addr[1], addr[2], addr[3]);
+      break;
+
+    case AF_UNSPEC:
+      /* We use AF_UNSPEC for ethernet addresses. */
+      s = format (s, "%02x:%02x:%02x:%02x:%02x:%02x",
+		  addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
+      break;
+
+    default:
+      clib_error ("unsupported address family %d", family);
+    }
+
+  return s;
+}
+
+u8 * format_sockaddr (u8 * s, va_list * args)
+{
+  void * v = va_arg (*args, void *);
+  struct sockaddr * sa = v;
+
+  switch (sa->sa_family)
+    {
+    case AF_INET:
+      {
+	struct sockaddr_in * i = v;
+	s = format (s, "%U:%U",
+		    format_network_address, AF_INET, &i->sin_addr.s_addr,
+		    format_network_port, IPPROTO_TCP, ntohs (i->sin_port));
+      }
+      break;
+
+    default:
+      s = format (s, "sockaddr family %d", sa->sa_family);
+      break;
+    }
+
+  return s;
+}
+

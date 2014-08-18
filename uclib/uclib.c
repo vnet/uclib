@@ -21,6 +21,8 @@
 #include <uclib/random_isaac.c>
 #include <uclib/random_buffer.c>
 #include <uclib/serialize.c>
+#include <uclib/socket.c>
 #include <uclib/time.c>
+#include <uclib/unix_file_poller.c>
 #include <uclib/url.c>
 #include <uclib/zvec.c>

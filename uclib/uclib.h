@@ -209,8 +209,10 @@ always_inline uword max_pow2 (uword x)
 #include <uclib/zvec.h>
 
 #include <uclib/elog.h>
+#include <uclib/socket.h>
 #include <uclib/unix.h>
 #include <uclib/url.h>
 #include <uclib/crypto.h>
+#include <uclib/unix_file_poller.h>
 
 #endif /* included_uclib_h */
