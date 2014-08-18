@@ -150,3 +150,120 @@ unix_file_poller_init (unix_file_poller_t * um)
 }
 
 #endif /* __linux__ */
+
+#ifdef __APPLE__
+
+#include <sys/event.h>
+#include <sys/time.h>
+
+typedef struct {
+  int kqueue_fd;
+  struct kevent * kevents;
+
+  /* Statistics. */
+  u64 kevents_ready;
+  u64 kevent_waits;
+} bsd_kqueue_main_t;
+
+static bsd_kqueue_main_t bsd_kqueue_main;
+
+static void
+bsd_kqueue_file_update (unix_file_poller_t * um,
+                        unix_file_poller_file_t * f,
+                        unix_file_poller_file_update_type_t update_type)
+{
+  bsd_kqueue_main_t * km = &bsd_kqueue_main;
+  struct kevent changes[2];
+
+  memset (&changes, 0, sizeof (changes));
+
+  EV_SET (&changes[0], f->file_descriptor, EVFILT_READ,
+          update_type == UNIX_FILE_POLLER_FILE_UPDATE_DELETE ? EV_DELETE : EV_ADD,
+          0,
+          f - um->file_pool);
+  changes[1] = changes[0];
+  changes[1].filter = EVFILT_WRITE;
+
+  if (kevent (km->kqueue_fd,
+              &changes[0],
+              (f->flags & UNIX_FILE_POLLER_FILE_DATA_AVAILABLE_TO_WRITE) ? 2 : 1,
+              /* eventlist */ 0,
+              /* n_events */ 0,
+              /* timeout */ 0) < 0)
+    clib_unix_warning ("kevent");
+}
+
+static uword
+bsd_kqueue_input (unix_file_poller_t * um, f64 timeout_in_sec)
+{
+  bsd_kqueue_main_t * km = &bsd_kqueue_main;
+  struct kevent * e;
+  int n_fds_ready;
+  struct timespec timeout;
+
+  timeout.ts_sec = timeout_in_sec;
+  timeout.ts_nsec = 1e9*(timeout_in_sec - timeout.ts_sec);
+
+  n_fds_ready = kevent (km->kqueue_fd,
+                        km->kqueue_events,
+                        vec_len (km->kqueue_events),
+                        &timeout);
+
+  if (n_fds_ready < 0)
+    {
+      if (unix_error_is_fatal (errno))
+        clib_unix_error ("kevent");
+
+      /* non fatal error (e.g. EINTR). */
+      return 0;
+    }
+
+  km->kevent_waits += 1;
+  em->kevent_files_ready += n_fds_ready;
+
+  for (e = km->kqueue_events; e < km->kqueue_events + n_fds_ready; e++)
+    {
+      u32 i = e->udata;
+      unix_file_poller_file_t * f = pool_elt_at_index (um->file_pool, i);
+      clib_error_t * errors[4];
+      int n_errors = 0;
+
+      if (e->filter == EVFILT_READ)
+        {
+          errors[n_errors] = f->read_function (f);
+          n_errors += errors[n_errors] != 0;
+        }
+      if (e->filter == EVFILT_WRITE)
+        {
+          errors[n_errors] = f->write_function (f);
+          n_errors += errors[n_errors] != 0;
+	}
+      ASSERT (n_errors < ARRAY_LEN (errors));
+      for (i = 0; i < n_errors; i++)
+	{
+	  unix_save_error (um, errors[i]);
+	}
+    }
+
+  return n_fds_ready;
+}
+
+clib_error_t *
+unix_file_poller_init (unix_file_poller_t * um)
+{
+  bsd_kqueue_main_t * km = &bsd_kqueue_main;
+  
+  /* Allocate some events. */
+  vec_resize (km->kqueue_events, 256);
+
+  em->kqueue_fd = kqueue ();
+  if (em->kqueue_fd < 0)
+    return clib_error_return_unix (0, "kqueue");
+
+  um->file_update = bsd_kqueue_file_update;
+  um->poll_for_input = bsd_kqueue_input;
+
+  return 0;
+}
+
+#endif /* __APPLE__ */
