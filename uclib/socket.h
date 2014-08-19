@@ -95,14 +95,7 @@ always_inline void
 clib_socket_tx_add_va_formatted (clib_socket_t * s, char * fmt, va_list * va)
 { s->tx_buffer = va_format (s->tx_buffer, fmt, va); }
 
-always_inline void
-clib_socket_tx_add_formatted (clib_socket_t * s, char * fmt, ...)
-{
-  va_list va;
-  va_start (va, fmt);
-  clib_socket_tx_add_va_formatted (s, fmt, &va);
-  va_end (va);
-}
+void clib_socket_tx_add_formatted (clib_socket_t * s, char * fmt, ...);
 
 always_inline clib_error_t *
 clib_socket_tx (clib_socket_t * s)

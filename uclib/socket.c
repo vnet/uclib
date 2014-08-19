@@ -144,6 +144,14 @@ socket_config (char * config,
   return error;
 }
 
+void clib_socket_tx_add_formatted (clib_socket_t * s, char * fmt, ...)
+{
+  va_list va;
+  va_start (va, fmt);
+  clib_socket_tx_add_va_formatted (s, fmt, &va);
+  va_end (va);
+}
+
 static clib_error_t *
 default_socket_write (clib_socket_t * s)
 {
