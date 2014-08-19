@@ -35,7 +35,7 @@ typedef struct {
 typedef struct {
   unix_file_poller_t unix_file_poller;
   test_socket_t * socket_pool;
-  u32 is_server;
+  u32 n_clients;
   u32 verbose;
   u32 max_tx_msgs;
   char * config;
@@ -196,16 +196,16 @@ int test_socket_main (unformat_input_t * input)
 
   memset (&tsm, 0, sizeof (tsm));
   tsm.config = "localhost";
-  tsm.is_server = 1;
+  tsm.n_clients = 1;
   tsm.max_tx_msgs = 100;
   tsm.verbose = 1;
 
   while (unformat_check_input (input) != UNFORMAT_END_OF_INPUT)
     {
       if (unformat (input, "listen %s", &tsm.config))
-        tsm.is_server = 1;
-      else if (unformat (input, "connect %s", &tsm.config))
-        tsm.is_server = 0;
+        ;
+      else if (unformat (input, "n-clients %d", &tsm.n_clients))
+        ;
       else
         {
           clib_warning ("unknown input `%U'", format_unformat_error, input);
@@ -213,48 +213,56 @@ int test_socket_main (unformat_input_t * input)
         }
     }
 
+  error = unix_file_poller_init (&tsm.unix_file_poller);
+  if (error)
+    goto done;
+
   {
     test_socket_t * ts;
     clib_socket_t * s;
     unix_file_poller_file_t pf;
+    int i;
 
     pool_get (tsm.socket_pool, ts);
     s = &ts->clib_socket;
 
-    s->is_server = tsm.is_server;
-    s->is_client = ! tsm.is_server;
+    s->is_server = 1;
     s->config = tsm.config;
-
     error = clib_socket_init (s);
     if (error)
       goto done;
 
     if (tsm.verbose)
-      clib_warning ("%s %U",
-                    tsm.is_server ? "listening" : "connecting",
-                    format_sockaddr, &s->self_addr);
-
-    unix_file_poller_init (&tsm.unix_file_poller);
+      clib_warning ("listening %U", format_sockaddr, &s->self_addr);
 
     memset (&pf, 0, sizeof (pf));
     pf.file_descriptor = s->fd;
     pf.private_data[0] = pointer_to_uword (&tsm);
     pf.private_data[1] = ts - tsm.socket_pool;
+    pf.read_function = socket_server_file_accept_on_read_ready;
+    pf.error_function = socket_server_file_error;
+    unix_file_poller_add_file (&tsm.unix_file_poller, &pf);
 
-    if (tsm.is_server)
-      {
-        pf.read_function = socket_server_file_accept_on_read_ready;
-        pf.error_function = socket_server_file_error;
-      }
-    else
+    for (i = 0; i < tsm.n_clients; i++)
       {
         pf.read_function = socket_client_file_read_ready;
         pf.write_function = socket_client_file_write_ready;
         pf.error_function = socket_server_file_error;
         pf.flags = UNIX_FILE_POLLER_FILE_DATA_AVAILABLE_TO_WRITE;
-      }
 
-    unix_file_poller_add_file (&tsm.unix_file_poller, &pf);
+        pool_get (tsm.socket_pool, ts);
+        s = &ts->clib_socket;
+        s->is_client = 1;
+        s->config = (char *) format (0, "%U%c", format_sockaddr, &tsm.socket_pool[0].clib_socket.self_addr, 0);
+        error = clib_socket_init (s);
+        if (error)
+          goto done;
+        
+        pf.file_descriptor = s->fd;
+        pf.private_data[0] = pointer_to_uword (&tsm);
+        pf.private_data[1] = ts - tsm.socket_pool;
+        unix_file_poller_add_file (&tsm.unix_file_poller, &pf);
+      }
   }
 
   while (pool_elts (tsm.unix_file_poller.file_pool) > 0)

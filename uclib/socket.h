@@ -29,6 +29,12 @@
 #include <netinet/in.h>
 #include <sys/un.h>
 
+typedef union {
+  struct sockaddr sa;
+  struct sockaddr_in in;
+  struct sockaddr_un un;
+} clib_socket_addr_t;
+
 typedef struct _socket_t {
   /* File descriptor. */
   int fd;
@@ -54,11 +60,7 @@ typedef struct _socket_t {
   u32 max_tx_buffer_bytes;
 
   /* Peer socket we are connected to. */
-  union {
-    struct sockaddr sa;
-    struct sockaddr_in in;
-    struct sockaddr_un un;
-  } self_addr, peer_addr;
+  clib_socket_addr_t self_addr, peer_addr;
 
   clib_error_t * (* write_func) (struct _socket_t * sock);
   clib_error_t * (* read_func) (struct _socket_t * sock, int min_bytes);

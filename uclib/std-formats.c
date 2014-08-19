@@ -238,13 +238,6 @@ u8 * format_c_identifier (u8 * s, va_list * va)
   return s;
 }
 
-u8 * format_network_port (u8 * s, va_list * args)
-{
-  uword proto = va_arg (*args, uword);
-  uword port = va_arg (*args, uword);
-  return format (s, "%s/%d", proto == IPPROTO_UDP ? "udp" : "tcp", port);
-}
-
 /* Format generic network address: takes two arguments family and address.
    Assumes network byte order. */
 u8 * format_network_address (u8 * s, va_list * args)
@@ -281,9 +274,9 @@ u8 * format_sockaddr (u8 * s, va_list * args)
     case AF_INET:
       {
 	struct sockaddr_in * i = v;
-	s = format (s, "%U:%U",
+	s = format (s, "%U:%d",
 		    format_network_address, AF_INET, &i->sin_addr.s_addr,
-		    format_network_port, IPPROTO_TCP, ntohs (i->sin_port));
+                    ntohs (i->sin_port));
       }
       break;
 
