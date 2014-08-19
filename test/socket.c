@@ -24,8 +24,6 @@
   WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#include <uclib/unix_file_poller.h>
-
 typedef struct {
   clib_socket_t clib_socket;
 

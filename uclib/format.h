@@ -67,6 +67,7 @@ _ (format_white_space);
 _ (format_f64);
 _ (format_time_interval);
 _ (format_clib_mem_usage);
+_ (format_sockaddr);
 
 #undef _
 
