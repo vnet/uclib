@@ -56,3 +56,18 @@ void clib_random_buffer_init (clib_random_buffer_t * b, uword seed)
       isaac_init (&b->ctx[i], s);
     }
 }
+
+void clib_random_buffer_init_multiseed (clib_random_buffer_t * b, u8 * seed)
+{
+  int i;
+
+  memset (b, 0, sizeof (b[0]));
+
+  /* Seed ISAAC. */
+  for (i = 0; i < ARRAY_LEN (b->ctx); i++)
+    {
+      uword s[ISAAC_SIZE];
+      memcpy (s, seed + i*sizeof(s), sizeof (s));
+      isaac_init (&b->ctx[i], s);
+    }
+}

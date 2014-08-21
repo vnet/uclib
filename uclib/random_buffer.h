@@ -50,8 +50,13 @@ clib_random_buffer_free (clib_random_buffer_t * b)
 /* Fill random buffer. */
 void clib_random_buffer_fill (clib_random_buffer_t * b, uword n_words);
 
-/* Initialize random buffer. */
+/* Initialize random buffer: single word seed. */
 void clib_random_buffer_init (clib_random_buffer_t * b, uword seed);
+
+#define clib_random_buffer_seed_bytes (STRUCT_SIZE_OF (clib_random_buffer_t, ctx))
+
+/* Initialize random buffer: full seed of size clib_random_buffer_seed_bytes. */
+void clib_random_buffer_init_multiseed (clib_random_buffer_t * b, u8 * seed);
 
 /* Returns word aligned random data, possibly filling buffer. */
 always_inline void *
