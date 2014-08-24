@@ -17,6 +17,7 @@
 #include <uclib/fifo.c>
 #include <uclib/hash.c>
 #include <uclib/heap.c>
+#include <uclib/http.c>
 #include <uclib/mhash.c>
 #include <uclib/random_isaac.c>
 #include <uclib/random_buffer.c>
@@ -25,4 +26,5 @@
 #include <uclib/time.c>
 #include <uclib/unix_file_poller.c>
 #include <uclib/url.c>
+#include <uclib/websocket.c>
 #include <uclib/zvec.c>
