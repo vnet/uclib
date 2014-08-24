@@ -51,13 +51,14 @@ void websocket_close (websocket_main_t * wsm, u32 ws_index)
   websocket_main_close_socket (wsm, ws, /* no error */ 0);
 }
 
-static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * c)
+static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
 {
   u32 payload_byte_size, n_bytes_in_frame_header;
   u64 n_bytes_of_payload;
   u8 frame_mask[4];
   u8 * h, is_masked;
-  clib_socket_t * s = &c->clib_socket;
+  clib_socket_t * s = &ws->clib_socket;
+  clib_error_t * error = 0;
 
   /* Shortest valid frame: 2 bytes header + 0 bytes of payload. */
   if (vec_len (s->rx_buffer) < 2)
@@ -65,10 +66,12 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * c)
 
   h = s->rx_buffer;
 
+  /* Keep it simple: no support for fragmentation or non-binary data. */
   if (h[0] != (WEBSOCKET_DATA_FRAMING_IS_FINAL_FRAGMENT | WEBSOCKET_DATA_FRAMING_OPCODE_BINARY_DATA))
     {
+      error = clib_error_return (0, "unknown opcode 0x%x", h[0]);
     close_connection:
-      ASSERT (0);
+      websocket_main_close_socket (wsm, ws, error);
       return 0;
     }
 
@@ -94,12 +97,17 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * c)
         n_bytes_of_payload = (  _ (0) | _ (1) | _ (2) | _ (3)
                                 | _ (4) | _ (5) | _ (6) | _ (7));
 #undef _
-
-      /* Bit 63 (sign bit) must be clear.  Enforce this by having a sane
-         max payload size. */
-      if (n_bytes_of_payload > wsm->max_n_bytes_in_payload)
-        goto close_connection;
     }
+
+  /* Bit 63 (sign bit) must be clear.  Enforce this by having a sane
+     max payload size. */
+  if (n_bytes_of_payload > wsm->max_n_bytes_in_payload)
+    {
+      error = clib_error_return (0, "payload overflow %Ld > %Ld",
+                                 n_bytes_of_payload, wsm->max_n_bytes_in_payload);
+      goto close_connection;
+    }
+
   h += payload_byte_size;
 
   memset (frame_mask, 0, sizeof (frame_mask));
@@ -121,7 +129,7 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * c)
     }
 
   ASSERT (wsm->rx_frame_payload);
-  wsm->rx_frame_payload (wsm, c, s->rx_buffer + n_bytes_in_frame_header, n_bytes_of_payload);
+  wsm->rx_frame_payload (wsm, ws, s->rx_buffer + n_bytes_in_frame_header, n_bytes_of_payload);
 
   /* Remove header and payload from receive buffer. */
   vec_delete (s->rx_buffer, n_bytes_in_frame_header + n_bytes_of_payload, 0);
@@ -130,10 +138,10 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * c)
 }
 
 static int
-parse_rx_handshake (websocket_main_t * wsm, websocket_socket_t * c,
+parse_rx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
                     uword * rx_buffer_advance)
 {
-  clib_socket_t * s = &c->clib_socket;
+  clib_socket_t * s = &ws->clib_socket;
   unformat_input_t input;
   http_request_or_response_t r;
   u8 * websocket_key = 0;
@@ -154,9 +162,9 @@ parse_rx_handshake (websocket_main_t * wsm, websocket_socket_t * c,
     goto done;
       
   /* Check client version. */
-  if (! http_request_unformat_value_for_key (&r, "sec-websocket-version", "%d", &c->websocket_version)
-      || c->websocket_version < 13
-      || c->websocket_version >= 256)
+  if (! http_request_unformat_value_for_key (&r, "sec-websocket-version", "%d", &ws->websocket_version)
+      || ws->websocket_version < 13
+      || ws->websocket_version >= 256)
     goto done;
 
   if (! http_request_value_for_key_compare (&r, "upgrade", "websocket"))
@@ -469,6 +477,9 @@ websocket_init (websocket_main_t * wsm)
 
     clib_random_buffer_init_multiseed (&wsm->random_buffer, seed);
   }
+
+  if (! wsm->max_n_bytes_in_payload)
+    wsm->max_n_bytes_in_payload = 16 << 10;
 
  done:
   return error;
