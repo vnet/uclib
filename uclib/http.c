@@ -147,7 +147,7 @@ uword unformat_http_request (unformat_input_t * input, va_list * va)
   vec_free (method_string);
   if (is_error)
     http_request_or_response_free (r);
-  return is_error;
+  return is_error ? 0 : 1;
 }
 
 uword unformat_http_response (unformat_input_t * input, va_list * va)
