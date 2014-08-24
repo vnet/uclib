@@ -48,10 +48,18 @@ typedef struct _socket_t {
   u32 is_client : 1;
   u32 non_blocking_connect : 1;
   u32 non_blocking_connect_in_progress : 1;
+  u32 tcp_delay : 1;            /* set to enable Nagle. */
   u32 rx_end_of_file : 1;
 
   /* Transmit buffer.  Holds data waiting to be written. */
   u8 * tx_buffer;
+
+  /* FIFO of tx buffers to be sent out.  tx_buffer above will
+     be added to tail of FIFO when tx function is called. */
+  u8 ** tx_buffer_fifo;
+
+  /* For writev system call. */
+  struct iovec * tx_buffer_iovecs;
 
   /* Receive buffer.  Holds data read from socket. */
   u8 * rx_buffer;
@@ -61,16 +69,19 @@ typedef struct _socket_t {
 
   /* Peer socket we are connected to. */
   clib_socket_addr_t self_addr, peer_addr;
-
-  clib_error_t * (* write_func) (struct _socket_t * sock);
-  clib_error_t * (* read_func) (struct _socket_t * sock, int min_bytes);
-  clib_error_t * (* close_func) (struct _socket_t * sock);
-  void * private_data;
 } clib_socket_t;
 
 always_inline void
 clib_socket_free (clib_socket_t *s)
 {
+  uword i, n = clib_fifo_elts (s->tx_buffer_fifo);
+  for (i = 0; i < n; i++)
+    {
+      u8 * b = * clib_fifo_elt_at_index (s->tx_buffer_fifo, i);
+      vec_free (b);
+    }
+  clib_fifo_free (s->tx_buffer_fifo);
+  vec_free (s->tx_buffer_iovecs);
   vec_free (s->tx_buffer);
   vec_free (s->rx_buffer);
   if (clib_mem_is_heap_object (s->config))
@@ -95,23 +106,26 @@ always_inline void
 clib_socket_tx_add_va_formatted (clib_socket_t * s, char * fmt, va_list * va)
 { s->tx_buffer = va_format (s->tx_buffer, fmt, va); }
 
+always_inline void
+clib_socket_tx_add_to_buffer_fifo_vector (clib_socket_t * s, u8 * buffer)
+{
+  /* Buffer will be freed on transmit. */
+  clib_fifo_add1 (s->tx_buffer_fifo, buffer);
+}
+
+always_inline void
+clib_socket_tx_add_to_buffer_fifo (clib_socket_t * s, u8 * data, uword n_data)
+{
+  u8 * buffer = 0;
+  vec_add (buffer, data, n_data);
+  clib_socket_tx_add_to_buffer_fifo_vector (s, buffer);
+}
+
 void clib_socket_tx_add_formatted (clib_socket_t * s, char * fmt, ...);
 
-always_inline clib_error_t *
-clib_socket_tx (clib_socket_t * s)
-{ return s->write_func (s); }
-
-always_inline clib_error_t *
-clib_socket_rx (clib_socket_t * s, int n_bytes)
-{ return s->read_func (s, n_bytes); }
-
-always_inline clib_error_t *
-clib_socket_close (clib_socket_t *sock)
-{
-  clib_error_t * err;
-  err = (* sock->close_func) (sock);
-  return err;
-}
+clib_error_t * clib_socket_rx (clib_socket_t * s, int n_bytes);
+clib_error_t * clib_socket_tx (clib_socket_t * s);
+clib_error_t * clib_socket_close (clib_socket_t *sock);
 
 always_inline clib_error_t *
 clib_socket_non_blocking_connect_status (clib_socket_t * s)

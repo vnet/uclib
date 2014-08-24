@@ -72,6 +72,15 @@ typedef struct unix_file_poller {
   u64 n_total_errors;
 } unix_file_poller_t;
 
+always_inline void
+unix_file_poller_free (unix_file_poller_t * um)
+{
+  uword i;
+  for (i = 0; i < ARRAY_LEN (um->error_history); i++)
+    if (um->error_history[i].error)
+      clib_error_free (um->error_history[i].error);
+}
+
 always_inline uword
 unix_file_poller_add_file (unix_file_poller_t * um, unix_file_poller_file_t * template)
 {
@@ -90,6 +99,10 @@ unix_file_poller_del_file (unix_file_poller_t * um, unix_file_poller_file_t * f)
   f->file_descriptor = ~0;
   pool_put (um->file_pool, f);
 }
+
+always_inline unix_file_poller_file_t *
+unix_file_poller_get_file (unix_file_poller_t * um, u32 i)
+{ return pool_elt_at_index (um->file_pool, i); }
 
 always_inline uword
 unix_file_poller_set_data_available_to_write (unix_file_poller_t * um,

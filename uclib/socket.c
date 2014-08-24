@@ -27,6 +27,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>        /* TCP_NODELAY */
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
@@ -152,58 +153,75 @@ void clib_socket_tx_add_formatted (clib_socket_t * s, char * fmt, ...)
   va_end (va);
 }
 
-static clib_error_t *
-default_socket_write (clib_socket_t * s)
+clib_error_t *
+clib_socket_tx (clib_socket_t * s)
 {
-  clib_error_t	* err = 0;
+  clib_error_t	* error = 0;
   word written = 0;
-  word fd = 0;
-  word tx_len;
 
-  fd = s->fd;
+  /* Gather buffers to send. */
+  {
+    u8 ** tbf;
+    struct iovec * iov;
 
-  /* Map standard input to standard output.
-     Typically, fd is a socket for which read/write both work. */
-  if (fd == 0)
-    fd = 1;
+    if (vec_len (s->tx_buffer) > 0)
+      {
+        clib_fifo_add1 (s->tx_buffer_fifo, s->tx_buffer);
+        s->tx_buffer = 0;
+      }
 
-  tx_len = vec_len (s->tx_buffer);
-  written = write (fd, s->tx_buffer, tx_len);
+    vec_reset_length (s->tx_buffer_iovecs);
+    clib_fifo_foreach (tbf, s->tx_buffer_fifo, ({
+      u8 * tb = tbf[0];
+      vec_add2 (s->tx_buffer_iovecs, iov, 1);
+      iov->iov_base = tb;
+      iov->iov_len = vec_len (tb);
+    }));
+  }
+
+  written = writev (s->fd, s->tx_buffer_iovecs, vec_len (s->tx_buffer_iovecs));
 
   /* Ignore certain errors. */
   if (written < 0 && ! unix_error_is_fatal (errno))
     written = 0;
 
   /* A "real" error occurred. */
-  if (written < 0)
+  if (written <= 0)
     {
-      err = clib_error_return_unix (0, "write %wd bytes", tx_len);
-      vec_free (s->tx_buffer);
+      if (written < 0)
+        error = clib_error_return_unix (0, "write");
       goto done;
     }
 
   /* Reclaim the transmitted part of the tx buffer on successful writes. */
-  else if (written > 0)
-    {
-      if (written == tx_len)
-	_vec_len (s->tx_buffer) = 0;
-      else
-	vec_delete (s->tx_buffer, written, 0);
-    }
+  {
+    uword n_left = written;
+    u8 * tb;
 
-  /* If a non-fatal error occurred AND
-     the buffer is full, then we must free it. */
-  else if (written == 0 && tx_len > s->max_tx_buffer_bytes)
-    {
-      vec_free (s->tx_buffer);
-    }
+    while (n_left > 0)
+      {
+        /* Get fifo head buffer. */
+        tb = * clib_fifo_elt_at_index (s->tx_buffer_fifo, 0);
+        if (n_left < vec_len (tb))
+          {
+            vec_delete (tb, n_left, 0);
+            break;
+          }
+        else
+          {
+            n_left -= vec_len (tb);
+            vec_free (tb);
+            clib_fifo_advance_head (s->tx_buffer_fifo, 1);
+          }
+      }
+  }
 
  done:
-  return err;
+  return error;
 }
 
-static clib_error_t *
-default_socket_read (clib_socket_t * sock, int n_bytes)
+clib_error_t *
+clib_socket_rx (clib_socket_t * sock, int n_bytes)
 {
   word fd, n_read;
   u8 * buf;
@@ -237,21 +255,11 @@ default_socket_read (clib_socket_t * sock, int n_bytes)
   return 0;
 }
 
-static clib_error_t * default_socket_close (clib_socket_t * s)
+clib_error_t * clib_socket_close (clib_socket_t * s)
 {
   if (close (s->fd) < 0)
     return clib_error_return_unix (0, "close");
   return 0;
-}
-
-static void socket_init_funcs (clib_socket_t * s)
-{
-  if (! s->write_func)
-    s->write_func = default_socket_write;
-  if (! s->read_func)
-    s->read_func = default_socket_read;
-  if (! s->close_func)
-    s->close_func = default_socket_close;
 }
 
 clib_error_t *
@@ -265,8 +273,6 @@ clib_socket_init (clib_socket_t * s)
 			 (s->is_server ? INADDR_LOOPBACK : INADDR_ANY));
   if (error)
     goto done;
-
-  socket_init_funcs (s);
 
   s->fd = socket (s->self_addr.sa.sa_family, SOCK_STREAM, 0);
   if (s->fd < 0)
@@ -307,6 +313,13 @@ clib_socket_init (clib_socket_t * s)
 	  clib_unix_warning ("setsockopt SO_REUSEADDR fails");
       }
 
+      /* Disable Nagle. */
+      {
+        int v = s->tcp_delay ? 0 : 1;
+        if (setsockopt (s->fd, IPPROTO_TCP, TCP_NODELAY, &v, sizeof (v)) < 0)
+          clib_unix_warning ("setsockopt TCP_NODELAY fails");
+      }
+
       if (need_bind
 	  && bind (s->fd, &s->self_addr.sa, addr_len) < 0)
 	{
@@ -314,7 +327,7 @@ clib_socket_init (clib_socket_t * s)
 	  goto done;
 	}
 
-      if (listen (s->fd, 5) < 0)
+      if (listen (s->fd, SOMAXCONN) < 0)
 	{
 	  error = clib_error_return_unix (0, "listen");
 	  goto done;
@@ -365,8 +378,8 @@ clib_socket_init (clib_socket_t * s)
 
 clib_error_t * clib_socket_accept (clib_socket_t * server, clib_socket_t * client)
 {
-  clib_error_t	* err = 0;
-  socklen_t	len = 0;
+  clib_error_t * error = 0;
+  socklen_t len = 0;
   
   memset (client, 0, sizeof (client[0]));
 
@@ -378,7 +391,7 @@ clib_error_t * clib_socket_accept (clib_socket_t * server, clib_socket_t * clien
   /* Set the new socket to be non-blocking. */
   if (fcntl (client->fd, F_SETFL, O_NONBLOCK) < 0)
     {
-      err = clib_error_return_unix (0, "fcntl O_NONBLOCK");
+      error = clib_error_return_unix (0, "fcntl O_NONBLOCK");
       goto close_client;
     }
     
@@ -386,16 +399,15 @@ clib_error_t * clib_socket_accept (clib_socket_t * server, clib_socket_t * clien
   len = sizeof (client->peer_addr.in);
   if (getpeername (client->fd, (struct sockaddr *) &client->peer_addr.in, &len) < 0)
     {
-      err = clib_error_return_unix (0, "getpeername");
+      error = clib_error_return_unix (0, "getpeername");
       goto close_client;
     }
 
+  client->self_addr = server->self_addr;
   client->is_client = 1;
-
-  socket_init_funcs (client);
   return 0;
 
  close_client:
   close (client->fd);
-  return err;
+  return error;
 }
