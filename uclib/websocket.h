@@ -27,6 +27,9 @@
 typedef struct {
   clib_socket_t clib_socket;
 
+  /* Index in socket pool. */
+  u32 index;
+
   /* Normally 13. */
   u32 websocket_version;
 
@@ -67,6 +70,7 @@ websocket_socket_free (websocket_socket_t * ws)
     {
       url_free (&ws->client.url);
     }
+  memset (ws, ~0, sizeof (ws[0])); /* poison */
 }
 
 #define foreach_websocket_data_framing_opcode   \

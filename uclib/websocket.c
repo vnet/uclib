@@ -23,6 +23,16 @@
 
 #include <uclib/uclib.h>
 
+always_inline websocket_socket_t *
+websocket_socket_alloc (websocket_main_t * wsm)
+{
+  websocket_socket_t * ws;
+  pool_get (wsm->socket_pool, ws);
+  memset (ws, 0, sizeof (ws[0]));
+  ws->index = ws - wsm->socket_pool;
+  return ws;
+}
+
 static clib_error_t *
 websocket_main_close_socket (websocket_main_t * wsm, websocket_socket_t * ws, clib_error_t * error)
 {
@@ -35,7 +45,7 @@ websocket_main_close_socket (websocket_main_t * wsm, websocket_socket_t * ws, cl
                   format_sockaddr, &s->peer_addr);
 
   if (wsm->connection_will_close)
-    wsm->connection_will_close (wsm, ws - wsm->socket_pool, error);
+    wsm->connection_will_close (wsm, ws->index, error);
 
   f = unix_file_poller_get_file (wsm->unix_file_poller, ws->unix_file_poller_file_index);
   unix_file_poller_del_file (wsm->unix_file_poller, f);
@@ -350,7 +360,7 @@ websocket_server_file_read_ready (unix_file_poller_file_t * f)
       ws->handshake_rx = 1;
 
       if (wsm->did_receive_handshake)
-        wsm->did_receive_handshake (wsm, ws - wsm->socket_pool);
+        wsm->did_receive_handshake (wsm, ws->index);
 
       /* Remove handshake from RX buffer. */
       vec_delete (s->rx_buffer, rx_buffer_advance, 0);
@@ -372,8 +382,7 @@ websocket_server_file_accept_on_read_ready (unix_file_poller_file_t * f)
   unix_file_poller_file_t client_file;
   clib_error_t * error = 0;
 
-  pool_get (wsm->socket_pool, client_ws);
-  memset (client_ws, 0, sizeof (client_ws[0]));
+  client_ws = websocket_socket_alloc (wsm);
   client_ws->is_server_client = 1;
   client_socket = &client_ws->clib_socket;
 
@@ -383,7 +392,7 @@ websocket_server_file_accept_on_read_ready (unix_file_poller_file_t * f)
 
   memset (&client_file, 0, sizeof (client_file));
   client_file.private_data[0] = pointer_to_uword (wsm);
-  client_file.private_data[1] = client_ws - wsm->socket_pool;
+  client_file.private_data[1] = client_ws->index;
   client_file.file_descriptor = client_socket->fd;
   client_file.read_function = websocket_server_file_read_ready;
   client_file.error_function = websocket_file_error_ready;
@@ -394,11 +403,11 @@ websocket_server_file_accept_on_read_ready (unix_file_poller_file_t * f)
 
   client_ws->time_stamp_of_connection_creation = unix_time_now ();
 
-  wsm->new_client_for_server (wsm, client_ws - wsm->socket_pool, server_ws - wsm->socket_pool);
+  wsm->new_client_for_server (wsm, client_ws->index, server_ws->index);
 
   if (wsm->verbose)
     clib_warning ("new connection index %d %U",
-                  client_ws - wsm->socket_pool,
+                  client_ws->index,
                   format_sockaddr, &client_socket->peer_addr);
 
  done:
@@ -543,7 +552,7 @@ void websocket_close_all_sockets_with_no_handshake (websocket_main_t * wsm)
     if (! ws->is_server_client)
       continue;
     if (time_now - ws->time_stamp_of_connection_creation > wsm->rx_handshake_timeout_in_sec)
-      close_bitmap = clib_bitmap_ori (close_bitmap, ws - wsm->socket_pool);
+      close_bitmap = clib_bitmap_ori (close_bitmap, ws->index);
   }));
 
   {
@@ -622,8 +631,8 @@ websocket_server_add_listener (websocket_main_t * wsm, char * config, u32 * ws_i
   clib_socket_t * s;
   unix_file_poller_file_t pf;
 
-  pool_get (wsm->socket_pool, ws);
-  memset (ws, 0, sizeof (ws[0]));
+  ws = websocket_socket_alloc (wsm);
+
   s = &ws->clib_socket;
 
   s->is_server = 1;
@@ -638,7 +647,7 @@ websocket_server_add_listener (websocket_main_t * wsm, char * config, u32 * ws_i
   memset (&pf, 0, sizeof (pf));
   pf.file_descriptor = s->fd;
   pf.private_data[0] = pointer_to_uword (wsm);
-  pf.private_data[1] = ws - wsm->socket_pool;
+  pf.private_data[1] = ws->index;
   pf.read_function = websocket_server_file_accept_on_read_ready;
   pf.error_function = websocket_file_error_ready;
   ws->unix_file_poller_file_index = unix_file_poller_add_file (wsm->unix_file_poller, &pf);
@@ -650,7 +659,7 @@ websocket_server_add_listener (websocket_main_t * wsm, char * config, u32 * ws_i
       pool_put (wsm->socket_pool, ws);
     }
   else
-    *ws_index = ws - wsm->socket_pool;
+    *ws_index = ws->index;
 
   return error;
 }
@@ -663,8 +672,8 @@ websocket_client_add_connection (websocket_main_t * wsm, char * config, char * u
   clib_socket_t * s;
   unix_file_poller_file_t pf;
 
-  pool_get (wsm->socket_pool, ws);
-  memset (ws, 0, sizeof (ws[0]));
+  ws = websocket_socket_alloc (wsm);
+
   s = &ws->clib_socket;
   s->is_client = 1;
   s->non_blocking_connect = 1;
@@ -685,7 +694,7 @@ websocket_client_add_connection (websocket_main_t * wsm, char * config, char * u
     pf.flags = UNIX_FILE_POLLER_FILE_DATA_AVAILABLE_TO_WRITE;
   pf.file_descriptor = s->fd;
   pf.private_data[0] = pointer_to_uword (wsm);
-  pf.private_data[1] = ws - wsm->socket_pool;
+  pf.private_data[1] = ws->index;
   ws->unix_file_poller_file_index = unix_file_poller_add_file (wsm->unix_file_poller, &pf);
 
 done:
@@ -695,7 +704,7 @@ done:
       pool_put (wsm->socket_pool, ws);
     }
   else
-    *ws_index = ws - wsm->socket_pool;
+    *ws_index = ws->index;
 
   return error;
 }
