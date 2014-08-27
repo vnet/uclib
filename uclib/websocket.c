@@ -51,6 +51,13 @@ void websocket_close (websocket_main_t * wsm, u32 ws_index)
   websocket_main_close_socket (wsm, ws, /* no error */ 0);
 }
 
+static clib_error_t *
+websocket_rx_handshake_timeout (websocket_main_t * wsm, websocket_socket_t * ws)
+{
+  clib_error_t * error = clib_error_return (0, "receive handshake timeout");
+  return websocket_main_close_socket (wsm, ws, error);
+}
+
 static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
 {
   u32 payload_byte_size, n_bytes_in_frame_header;
@@ -155,7 +162,7 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
     {
       websocket_main_close_socket (wsm, ws, error);
       ASSERT (rx_frame_parsed == 0);
-      clib_error_free (error);
+      unix_save_error (wsm->unix_file_poller, error);
     }
 
   return rx_frame_parsed;
@@ -334,11 +341,8 @@ websocket_server_file_read_ready (unix_file_poller_file_t * f)
       if (! parse_rx_handshake (wsm, ws, &rx_buffer_advance))
         {
           f64 time_now = unix_time_now ();
-          if (time_now > ws->time_stamp_of_connection_creation + 15)
-            {
-              error = clib_error_return (0, "receive handshake timeout");
-              return websocket_main_close_socket (wsm, ws, error);
-            }
+          if (time_now > ws->time_stamp_of_connection_creation + wsm->rx_handshake_timeout_in_sec)
+            return websocket_rx_handshake_timeout (wsm, ws);
           else
             return error;
         }
@@ -427,11 +431,8 @@ websocket_client_file_read_ready (unix_file_poller_file_t * f)
       if (! parse_tx_handshake (wsm, ws, &rx_buffer_advance))
         {
           f64 time_now = unix_time_now ();
-          if (time_now > ws->time_stamp_of_connection_creation + 15)
-            {
-              error = clib_error_return (0, "receive handshake timeout");
-              return websocket_main_close_socket (wsm, ws, error);
-            }
+          if (time_now > ws->time_stamp_of_connection_creation + wsm->rx_handshake_timeout_in_sec)
+            return websocket_rx_handshake_timeout (wsm, ws);
           else
             return error;
         }
@@ -524,8 +525,39 @@ websocket_init (websocket_main_t * wsm)
   if (! wsm->max_n_bytes_in_payload)
     wsm->max_n_bytes_in_payload = 16 << 10;
 
+  if (wsm->rx_handshake_timeout_in_sec <= 0)
+    wsm->rx_handshake_timeout_in_sec = 5;
+
  done:
   return error;
+}
+
+/* Reap all sockets that have not sent proper handshakes. */
+void websocket_close_all_sockets_with_no_handshake (websocket_main_t * wsm)
+{
+  websocket_socket_t * ws;
+  f64 time_now = unix_time_now ();
+  uword * close_bitmap = 0;
+
+  pool_foreach (ws, wsm->socket_pool, ({
+    if (! ws->is_server_client)
+      continue;
+    if (time_now - ws->time_stamp_of_connection_creation > wsm->rx_handshake_timeout_in_sec)
+      close_bitmap = clib_bitmap_ori (close_bitmap, ws - wsm->socket_pool);
+  }));
+
+  {
+    uword ws_index;
+    clib_error_t * error;
+
+    clib_bitmap_foreach (ws_index, close_bitmap, ({
+      ws = pool_elt_at_index (wsm->socket_pool, ws_index);
+      error = websocket_rx_handshake_timeout (wsm, ws);
+      unix_save_error (wsm->unix_file_poller, error);
+    }));
+  }
+
+  clib_bitmap_free (close_bitmap);
 }
 
 static clib_error_t * websocket_socket_tx_frame_helper (websocket_socket_t * ws, uword is_binary)

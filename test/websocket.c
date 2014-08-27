@@ -85,18 +85,7 @@ test_websocket_did_receive_handshake (websocket_main_t * wsm, u32 ws_index)
 {
   websocket_socket_t * ws = pool_elt_at_index (wsm->socket_pool, ws_index);
   http_request_or_response_t * r = &ws->server.http_handshake_request;
-  u8 * v[2];
-
-  clib_warning ("%U", format_http_request, r);
-  v[0] = http_request_query_value_for_key (r, "a");
-  v[1] = http_request_query_value_for_key (r, "c");
-  clib_warning ("fart %v %v", v[0], v[1]);
-
-  {
-    int z;
-    if (http_request_query_unformat_value_for_key (r, "a", "%d", &z))
-      clib_warning ("zart %d", z);
-  }
+  clib_warning ("request: %U", format_http_request, r);
 }
 
 int test_websocket_main (unformat_input_t * input)
@@ -200,6 +189,7 @@ int test_websocket_main (unformat_input_t * input)
     websocket_socket_t * ws;
     clib_socket_t * s;
     f64 last_print_time = unix_time_now ();
+    f64 last_scan_time = last_print_time;
 
     while (pool_elts (tsm.unix_file_poller.file_pool) > (tsm.is_echo ? 0 : 1))
       {
@@ -215,6 +205,9 @@ int test_websocket_main (unformat_input_t * input)
             clib_warning ("%U", format_clib_mem_usage, /* verbose */ 0);
             last_print_time += 1;
           }
+
+        if (now - last_scan_time > 5)
+          websocket_close_all_sockets_with_no_handshake (wsm);
 
         if (! tsm.is_echo)
           {

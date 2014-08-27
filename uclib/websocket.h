@@ -116,11 +116,15 @@ typedef struct websocket_main_t {
   /* Random buffer for sec_websocket_key.  Seeded with /dev/urandom. */
   clib_random_buffer_t random_buffer;
 
+  /* If correct handshake is not received before a certain time close connection. */
+  f64 rx_handshake_timeout_in_sec;
+
   u32 verbose;
 } websocket_main_t;
 
 clib_error_t * websocket_init (websocket_main_t * wsm);
 void websocket_close (websocket_main_t * wsm, u32 ws_index);
+void websocket_close_all_sockets_with_no_handshake (websocket_main_t * wsm);
 clib_error_t * websocket_socket_tx_binary_frame (websocket_socket_t * ws);
 clib_error_t * websocket_socket_tx_text_frame (websocket_socket_t * ws);
 
