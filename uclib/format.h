@@ -174,6 +174,20 @@ always_inline void unformat_skip_line (unformat_input_t * i)
     ;
 }
 
+always_inline uword
+unformat_is_white_space (uword c)
+{
+  switch (c)
+    {
+    case ' ':  case '\t':
+    case '\n': case '\r':
+      return 1;
+
+    default:
+      return 0;
+    }
+}
+
 uword unformat_skip_white_space (unformat_input_t * input);
 
 /* Unformat function. */

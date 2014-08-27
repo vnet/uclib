@@ -59,20 +59,34 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
   u8 * h, is_masked;
   clib_socket_t * s = &ws->clib_socket;
   clib_error_t * error = 0;
+  uword rx_frame_parsed = 0;
 
   /* Shortest valid frame: 2 bytes header + 0 bytes of payload. */
   if (vec_len (s->rx_buffer) < 2)
-    return 0;
+    goto done;
 
   h = s->rx_buffer;
 
-  /* Keep it simple: no support for fragmentation or non-binary data. */
-  if (h[0] != (WEBSOCKET_DATA_FRAMING_IS_FINAL_FRAGMENT | WEBSOCKET_DATA_FRAMING_OPCODE_BINARY_DATA))
+  /* Keep it simple: no support for fragmentation. */
+  if (! (h[0] & WEBSOCKET_DATA_FRAMING_IS_FINAL_FRAGMENT))
     {
+      error = clib_error_return (0, "no support for fragmentation (opcode 0x%x)", h[0]);
+      goto done;
+    }
+
+  switch (h[0] & 0xf)
+    {
+    case WEBSOCKET_DATA_FRAMING_OPCODE_BINARY_DATA:
+    case WEBSOCKET_DATA_FRAMING_OPCODE_TEXT_DATA:
+      break;
+
+    case WEBSOCKET_DATA_FRAMING_OPCODE_CLOSE:
+      error = clib_error_return (0, "close opcode received");
+      goto done;
+
+    default:
       error = clib_error_return (0, "unknown opcode 0x%x", h[0]);
-    close_connection:
-      websocket_main_close_socket (wsm, ws, error);
-      return 0;
+      goto done;
     }
 
   is_masked = (h[1] & WEBSOCKET_DATA_FRAMING_PAYLOAD_IS_MASKED) != 0;
@@ -85,7 +99,7 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
 
   n_bytes_in_frame_header = 2 + (is_masked ? sizeof (u32) : 0) + payload_byte_size;
   if (vec_len (s->rx_buffer) < n_bytes_in_frame_header)
-    return 0;
+    goto done;
 
   h += 2;
   if (n_bytes_of_payload >= 126)
@@ -105,7 +119,7 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
     {
       error = clib_error_return (0, "payload overflow %Ld > %Ld",
                                  n_bytes_of_payload, wsm->max_n_bytes_in_payload);
-      goto close_connection;
+      goto done;
     }
 
   h += payload_byte_size;
@@ -119,7 +133,7 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
     }
 
   if (vec_len (s->rx_buffer) < n_bytes_in_frame_header + n_bytes_of_payload)
-    return 0;
+    goto done;
 
   if (is_masked)
     {
@@ -134,7 +148,17 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
   /* Remove header and payload from receive buffer. */
   vec_delete (s->rx_buffer, n_bytes_in_frame_header + n_bytes_of_payload, 0);
 
-  return 1;
+  rx_frame_parsed = 1;
+
+ done:
+  if (error)
+    {
+      websocket_main_close_socket (wsm, ws, error);
+      ASSERT (rx_frame_parsed == 0);
+      clib_error_free (error);
+    }
+
+  return rx_frame_parsed;
 }
 
 static int
@@ -158,7 +182,8 @@ parse_rx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
     goto done;
 
   /* Host: must match. */
-  if (! hash_get_mem (wsm->host_name_hash, http_request_value_for_key (&r, "host")))
+  if (hash_elts (wsm->host_name_hash) > 0
+      && ! hash_get_mem (wsm->host_name_hash, http_request_value_for_key (&r, "host")))
     goto done;
       
   /* Check client version. */
@@ -201,7 +226,10 @@ parse_rx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
   input.buffer = 0;             /* don't free clib_socket rx_buffer */
   unformat_free (&input);
   vec_free (websocket_key);
-  http_request_or_response_free (&r);
+  if (is_ok)
+    ws->server.http_handshake_request = r;
+  else
+    http_request_or_response_free (&r);
   return is_ok;
 }
 
@@ -238,7 +266,7 @@ parse_tx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
       goto done;
 
     websocket_key = format (0, "%U%s",
-                            format_base64_data, ws->sec_websocket_key_random_bytes, sizeof (ws->sec_websocket_key_random_bytes),
+                            format_base64_data, ws->client.sec_websocket_key_random_bytes, sizeof (ws->client.sec_websocket_key_random_bytes),
                             "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
     sha1 (sum, websocket_key, vec_len (websocket_key));
     vec_free (websocket_key);
@@ -277,7 +305,10 @@ websocket_file_error_ready (unix_file_poller_file_t * f)
   else
     error = clib_error_return (0, "error %s", strerror (error_errno));
 
-  return websocket_main_close_socket (wsm, ws, error);
+  websocket_main_close_socket (wsm, ws, error); /* frees error */
+  error = 0;
+
+  return 0;
 }
 
 static clib_error_t *
@@ -292,7 +323,10 @@ websocket_server_file_read_ready (unix_file_poller_file_t * f)
     return error;
 
   if (s->rx_end_of_file)
-    return websocket_main_close_socket (wsm, ws, error);
+    {
+      websocket_main_close_socket (wsm, ws, error);
+      return 0;
+    }
 
   if (! ws->handshake_rx)
     {
@@ -310,6 +344,9 @@ websocket_server_file_read_ready (unix_file_poller_file_t * f)
         }
 
       ws->handshake_rx = 1;
+
+      if (wsm->did_receive_handshake)
+        wsm->did_receive_handshake (wsm, ws - wsm->socket_pool);
 
       /* Remove handshake from RX buffer. */
       vec_delete (s->rx_buffer, rx_buffer_advance, 0);
@@ -350,6 +387,8 @@ websocket_server_file_accept_on_read_ready (unix_file_poller_file_t * f)
   client_ws->unix_file_poller_file_index = unix_file_poller_add_file (wsm->unix_file_poller, &client_file);
 
   memcpy (&client_ws->opaque, server_ws->opaque, sizeof (server_ws->opaque));
+
+  client_ws->time_stamp_of_connection_creation = unix_time_now ();
 
   wsm->new_client_for_server (wsm, client_ws - wsm->socket_pool, server_ws - wsm->socket_pool);
 
@@ -425,26 +464,30 @@ websocket_client_file_write_ready (unix_file_poller_file_t * f)
       ws->time_stamp_of_connection_creation = unix_time_now ();
 
       {
-        u8 * k = clib_random_buffer_get_data (&wsm->random_buffer, sizeof (ws->sec_websocket_key_random_bytes));
-        memcpy (ws->sec_websocket_key_random_bytes, k, sizeof (ws->sec_websocket_key_random_bytes));
+        u8 * k = clib_random_buffer_get_data (&wsm->random_buffer, sizeof (ws->client.sec_websocket_key_random_bytes));
+        memcpy (ws->client.sec_websocket_key_random_bytes, k, sizeof (ws->client.sec_websocket_key_random_bytes));
       }
 
       /* Connection completed: send handshake. */
-      clib_socket_tx_add_formatted
-        (s,
-         "GET %v%s%v HTTP/1.1\r\n"
-         "Host: %v\r\n"
-         "Upgrade: websocket\r\n"
-         "Connection: Upgrade\r\n"
-         "Sec-WebSocket-Key: %U\r\n"
-         "Sec-WebSocket-Version: 13\r\n"
-         "\r\n",
-         url_path (&ws->url),
-         vec_len (url_query (&ws->url)) > 0 ? "?" : "",
-         url_query (&ws->url),
-         url_host (&ws->url),
-         format_base64_data, ws->sec_websocket_key_random_bytes, sizeof (ws->sec_websocket_key_random_bytes));
-    }
+      {
+        url_t * url = &ws->client.url;
+
+        clib_socket_tx_add_formatted
+          (s,
+           "GET %v%s%v HTTP/1.1\r\n"
+           "Host: %v\r\n"
+           "Upgrade: websocket\r\n"
+           "Connection: Upgrade\r\n"
+           "Sec-WebSocket-Key: %U\r\n"
+           "Sec-WebSocket-Version: 13\r\n"
+           "\r\n",
+           url_path (url),
+           vec_len (url_query (url)) > 0 ? "?" : "",
+           url_query (url),
+           url_host (url),
+           format_base64_data, ws->client.sec_websocket_key_random_bytes, sizeof (ws->client.sec_websocket_key_random_bytes));
+      }
+  }
   else
     {
       error = clib_socket_tx (s);
@@ -485,7 +528,7 @@ websocket_init (websocket_main_t * wsm)
   return error;
 }
 
-clib_error_t * websocket_socket_tx (websocket_socket_t * ws)
+static clib_error_t * websocket_socket_tx_frame_helper (websocket_socket_t * ws, uword is_binary)
 {
   clib_socket_t * s = &ws->clib_socket;
   u32 l;
@@ -493,7 +536,8 @@ clib_error_t * websocket_socket_tx (websocket_socket_t * ws)
 
   f = framing_data;
 
-  *f++ = WEBSOCKET_DATA_FRAMING_IS_FINAL_FRAGMENT | WEBSOCKET_DATA_FRAMING_OPCODE_BINARY_DATA;
+  *f++ = (WEBSOCKET_DATA_FRAMING_IS_FINAL_FRAGMENT |
+          (is_binary ? WEBSOCKET_DATA_FRAMING_OPCODE_BINARY_DATA : WEBSOCKET_DATA_FRAMING_OPCODE_TEXT_DATA));
 
   l = vec_len (s->tx_buffer);
   if (l < 126)
@@ -517,6 +561,11 @@ clib_error_t * websocket_socket_tx (websocket_socket_t * ws)
 
   return clib_socket_tx (s);
 }
+
+clib_error_t * websocket_socket_tx_binary_frame (websocket_socket_t * ws)
+{ return websocket_socket_tx_frame_helper (ws, /* is_binary */ 1); }
+clib_error_t * websocket_socket_tx_text_frame (websocket_socket_t * ws)
+{ return websocket_socket_tx_frame_helper (ws, /* is_binary */ 0); }
 
 void websocket_server_add_host (websocket_main_t * wsm, char * fmt, ...)
 {
@@ -592,7 +641,7 @@ websocket_client_add_connection (websocket_main_t * wsm, char * config, char * u
   if (error)
     goto done;
         
-  error = url_parse_components ((u8 *) url, &ws->url);
+  error = url_parse_components ((u8 *) url, &ws->client.url);
   if (error)
     goto done;
 

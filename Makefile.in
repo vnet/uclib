@@ -77,7 +77,7 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-noinst_PROGRAMS = sha$(EXEEXT) socket$(EXEEXT)
+noinst_PROGRAMS = sha$(EXEEXT) socket$(EXEEXT) websocket$(EXEEXT)
 subdir = .
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/configure $(am__configure_deps) depcomp \
@@ -99,6 +99,9 @@ sha_LDADD = $(LDADD)
 am_socket_OBJECTS = test/socket.$(OBJEXT)
 socket_OBJECTS = $(am_socket_OBJECTS)
 socket_LDADD = $(LDADD)
+am_websocket_OBJECTS = test/websocket.$(OBJEXT)
+websocket_OBJECTS = $(am_websocket_OBJECTS)
+websocket_LDADD = $(LDADD)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -127,8 +130,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(sha_SOURCES) $(socket_SOURCES)
-DIST_SOURCES = $(sha_SOURCES) $(socket_SOURCES)
+SOURCES = $(sha_SOURCES) $(socket_SOURCES) $(websocket_SOURCES)
+DIST_SOURCES = $(sha_SOURCES) $(socket_SOURCES) $(websocket_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -289,6 +292,7 @@ AUTOMAKE_OPTIONS = foreign subdir-objects
 AM_CFLAGS = -Wall
 sha_SOURCES = test/sha.c
 socket_SOURCES = test/socket.c
+websocket_SOURCES = test/websocket.c
 nobase_include_HEADERS = $(wildcard $(srcdir)/uclib/*.[ch])
 all: all-am
 
@@ -349,6 +353,12 @@ test/socket.$(OBJEXT): test/$(am__dirstamp) \
 socket$(EXEEXT): $(socket_OBJECTS) $(socket_DEPENDENCIES) $(EXTRA_socket_DEPENDENCIES) 
 	@rm -f socket$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(socket_OBJECTS) $(socket_LDADD) $(LIBS)
+test/websocket.$(OBJEXT): test/$(am__dirstamp) \
+	test/$(DEPDIR)/$(am__dirstamp)
+
+websocket$(EXEEXT): $(websocket_OBJECTS) $(websocket_DEPENDENCIES) $(EXTRA_websocket_DEPENDENCIES) 
+	@rm -f websocket$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(websocket_OBJECTS) $(websocket_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -359,6 +369,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@test/$(DEPDIR)/sha.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@test/$(DEPDIR)/socket.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@test/$(DEPDIR)/websocket.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\

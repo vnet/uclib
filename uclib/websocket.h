@@ -30,28 +30,43 @@ typedef struct {
   /* Normally 13. */
   u32 websocket_version;
 
-  u32 is_server_client : 1;
-  u32 handshake_rx : 1;
-
-  /* Web socket url. */
-  url_t url;
+  u8 is_server_client : 1;
+  u8 handshake_rx : 1;
 
   /* Used to timeout inactive connections which don't complete handshake. */
   f64 time_stamp_of_connection_creation;
 
-  /* 16 bytes sent via Sec-WebSocket-Key. */
-  u8 sec_websocket_key_random_bytes[16];
-
   u32 unix_file_poller_file_index;
 
   uword opaque[2];
+
+  union {
+    struct {
+      /* Web socket url. */
+      url_t url;
+
+      /* 16 bytes sent via Sec-WebSocket-Key. */
+      u8 sec_websocket_key_random_bytes[16];
+    } client;
+
+    struct {
+      http_request_or_response_t http_handshake_request;
+    } server;
+  };
 } websocket_socket_t;
 
 always_inline void
 websocket_socket_free (websocket_socket_t * ws)
 {
   clib_socket_free (&ws->clib_socket);
-  url_free (&ws->url);
+  if (ws->is_server_client)
+    {
+      http_request_or_response_free (&ws->server.http_handshake_request);
+    }
+  else
+    {
+      url_free (&ws->client.url);
+    }
 }
 
 #define foreach_websocket_data_framing_opcode   \
@@ -91,6 +106,8 @@ typedef struct websocket_main_t {
 
   void (* connection_will_close) (struct websocket_main_t * wsm, u32 ws_index, clib_error_t * reason);
 
+  void (* did_receive_handshake) (struct websocket_main_t * wsm, u32 ws_index);
+
   /* "Host:" field in handshake must match something in hash table. */
   uword * host_name_hash;
 
@@ -104,7 +121,8 @@ typedef struct websocket_main_t {
 
 clib_error_t * websocket_init (websocket_main_t * wsm);
 void websocket_close (websocket_main_t * wsm, u32 ws_index);
-clib_error_t * websocket_socket_tx (websocket_socket_t * ws);
+clib_error_t * websocket_socket_tx_binary_frame (websocket_socket_t * ws);
+clib_error_t * websocket_socket_tx_text_frame (websocket_socket_t * ws);
 
 void websocket_server_add_host (websocket_main_t * wsm, char * fmt, ...);
 clib_error_t * websocket_server_add_listener (websocket_main_t * wsm, char * config, u32 * ws_index);

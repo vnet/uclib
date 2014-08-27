@@ -53,20 +53,6 @@ uword _unformat_fill_input (unformat_input_t * i)
   return i->index;
 }
 
-always_inline uword
-is_white_space (uword c)
-{
-  switch (c)
-    {
-    case ' ':  case '\t':
-    case '\n': case '\r':
-      return 1;
-
-    default:
-      return 0;
-    }
-}
-
 /* Format function for dumping input stream. */
 u8 * format_unformat_error (u8 * s, va_list * va)
 {
@@ -87,7 +73,7 @@ u8 * format_unformat_error (u8 * s, va_list * va)
       /* Skip white space at end. */
       if (n <= n_max)
 	{
-	  while (p_end > p && is_white_space (p_end[-1]))
+	  while (p_end > p && unformat_is_white_space (p_end[-1]))
 	    p_end--;
 	}
 
@@ -749,7 +735,7 @@ uword unformat_skip_white_space (unformat_input_t * input)
 
   while ((c = unformat_get_input (input)) != UNFORMAT_END_OF_INPUT)
     {
-      if (! is_white_space (c))
+      if (! unformat_is_white_space (c))
 	{
 	  unformat_put_input (input);
 	  break;
@@ -791,13 +777,13 @@ va_unformat (unformat_input_t * input, char * fmt, va_list * va)
       skip_input_white_space = f == fmt || default_skip_input_white_space;
 
       /* Spaces in format request skipping input white space. */
-      if (is_white_space (cf))
+      if (unformat_is_white_space (cf))
 	{
 	  skip_input_white_space = 1;
 
 	  /* Multiple format spaces are equivalent to a single white
 	     space. */
-	  while (is_white_space (*++f))
+	  while (unformat_is_white_space (*++f))
 	    ;
 	}
       else if (cf == '%')
