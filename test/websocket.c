@@ -81,12 +81,13 @@ test_websocket_connection_will_close (websocket_main_t * wsm, u32 ws_index, clib
     }
 }
 
-static void
+static clib_error_t *
 test_websocket_did_receive_handshake (websocket_main_t * wsm, u32 ws_index)
 {
   websocket_socket_t * ws = pool_elt_at_index (wsm->socket_pool, ws_index);
   http_request_or_response_t * r = &ws->server.http_handshake_request;
   clib_warning ("request: %U", format_http_request, r);
+  return 0;
 }
 
 int test_websocket_main (unformat_input_t * input)

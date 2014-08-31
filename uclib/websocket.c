@@ -359,7 +359,11 @@ websocket_server_file_read_ready (unix_file_poller_file_t * f)
       ws->handshake_rx = 1;
 
       if (wsm->did_receive_handshake)
-        wsm->did_receive_handshake (wsm, ws->index);
+        {
+          error = wsm->did_receive_handshake (wsm, ws->index);
+          if (error)
+            return websocket_main_close_socket (wsm, ws, error);
+        }
 
       /* Remove handshake from RX buffer. */
       vec_delete (s->rx_buffer, rx_buffer_advance, 0);

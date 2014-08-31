@@ -128,7 +128,7 @@ typedef struct websocket_main_t {
 
   void (* connection_will_close) (struct websocket_main_t * wsm, u32 ws_index, clib_error_t * reason);
 
-  void (* did_receive_handshake) (struct websocket_main_t * wsm, u32 ws_index);
+  clib_error_t * (* did_receive_handshake) (struct websocket_main_t * wsm, u32 ws_index);
 
   /* "Host:" field in handshake must match something in hash table. */
   uword * host_name_hash;
