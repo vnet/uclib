@@ -164,18 +164,19 @@ clib_socket_tx (clib_socket_t * s)
     u8 ** tbf;
     struct iovec * iov;
 
-    if (vec_len (s->tx_buffer) > 0)
+    if (vec_len (s->current_tx_buffer) > 0)
       {
-        clib_fifo_add1 (s->tx_buffer_fifo, s->tx_buffer);
-        s->tx_buffer = 0;
+        clib_fifo_add1 (s->tx_buffer_fifo, s->current_tx_buffer);
+        s->current_tx_buffer = 0;
       }
 
     vec_reset_length (s->tx_buffer_iovecs);
     clib_fifo_foreach (tbf, s->tx_buffer_fifo, ({
       u8 * tb = tbf[0];
+      clib_socket_buffer_header_t * tbh = vec_header (tb, sizeof (tbh[0]));
       vec_add2 (s->tx_buffer_iovecs, iov, 1);
-      iov->iov_base = tb;
-      iov->iov_len = vec_len (tb);
+      iov->iov_base = tb + tbh->offset;
+      iov->iov_len = vec_len (tb) - tbh->offset;
     }));
   }
 
@@ -196,21 +197,24 @@ clib_socket_tx (clib_socket_t * s)
   /* Reclaim the transmitted part of the tx buffer on successful writes. */
   {
     uword n_left = written;
-    u8 * tb;
+    u8 * b;
+    clib_socket_buffer_header_t * bh;
 
     while (n_left > 0)
       {
         /* Get fifo head buffer. */
-        tb = * clib_fifo_elt_at_index (s->tx_buffer_fifo, 0);
-        if (n_left < vec_len (tb))
+        b = * clib_fifo_elt_at_index (s->tx_buffer_fifo, 0);
+        bh = vec_header (b, sizeof (bh[0]));
+        ASSERT (bh->offset < vec_len (b));
+        if (bh->offset + n_left < vec_len (b))
           {
-            vec_delete (tb, n_left, 0);
+            bh->offset += n_left;
             break;
           }
         else
           {
-            n_left -= vec_len (tb);
-            vec_free (tb);
+            n_left -= vec_len (b);
+            clib_socket_buffer_free (b);
             clib_fifo_advance_head (s->tx_buffer_fifo, 1);
           }
       }
@@ -221,19 +225,19 @@ clib_socket_tx (clib_socket_t * s)
 }
 
 clib_error_t *
-clib_socket_rx (clib_socket_t * sock, int n_bytes)
+clib_socket_rx (clib_socket_t * s, int n_bytes)
 {
   word fd, n_read;
   u8 * buf;
 
   /* RX side of socket is down once end of file is reached. */
-  if (sock->rx_end_of_file)
+  if (s->rx_end_of_file)
     return 0;
 
-  fd = sock->fd;
+  fd = s->fd;
 
   n_bytes = clib_max (n_bytes, 4096);
-  vec_add2 (sock->rx_buffer, buf, n_bytes);
+  vec_add2 (s->rx_buffer, buf, n_bytes);
 
   if ((n_read = read (fd, buf, n_bytes)) < 0)
     {
@@ -247,10 +251,10 @@ clib_socket_rx (clib_socket_t * sock, int n_bytes)
     }
       
   /* Other side closed the socket. */
-  sock->rx_end_of_file = n_read == 0;
+  s->rx_end_of_file = n_read == 0;
 
  non_fatal:
-  _vec_len (sock->rx_buffer) += n_read - n_bytes;
+  _vec_len (s->rx_buffer) += n_read - n_bytes;
 
   return 0;
 }

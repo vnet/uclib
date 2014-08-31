@@ -19,7 +19,7 @@ typedef struct {
   u32 is_echo;
 } test_websocket_main_t;
 
-static void
+static clib_error_t *
 test_websocket_rx_frame_payload (websocket_main_t * wsm, websocket_socket_t * ws, u8 * rx_payload, u32 n_payload_bytes)
 {
   test_websocket_main_t * tsm = uword_to_pointer (ws->opaque[0], test_websocket_main_t *);
@@ -33,13 +33,14 @@ test_websocket_rx_frame_payload (websocket_main_t * wsm, websocket_socket_t * ws
   if (tsm->is_echo)
     {
       clib_socket_t * s = &ws->clib_socket;
-      vec_add (s->tx_buffer, rx_payload, n_payload_bytes);
+      clib_socket_tx_add (s, rx_payload, n_payload_bytes);
       websocket_socket_tx_text_frame (ws);
     }
   else
     {
     }
   tws->n_msgs_received += 1;
+  return 0;
 }
 
 static void

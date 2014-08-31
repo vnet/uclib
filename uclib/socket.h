@@ -35,6 +35,10 @@ typedef union {
   struct sockaddr_un un;
 } clib_socket_addr_t;
 
+typedef struct {
+  u32 offset;
+} clib_socket_buffer_header_t;
+
 typedef struct _socket_t {
   /* File descriptor. */
   int fd;
@@ -52,7 +56,7 @@ typedef struct _socket_t {
   u32 rx_end_of_file : 1;
 
   /* Transmit buffer.  Holds data waiting to be written. */
-  u8 * tx_buffer;
+  u8 * current_tx_buffer;
 
   /* FIFO of tx buffers to be sent out.  tx_buffer above will
      be added to tail of FIFO when tx function is called. */
@@ -60,6 +64,8 @@ typedef struct _socket_t {
 
   /* For writev system call. */
   struct iovec * tx_buffer_iovecs;
+
+  u8 * tx_add_formatted_buffer;
 
   /* Receive buffer.  Holds data read from socket. */
   u8 * rx_buffer;
@@ -71,6 +77,14 @@ typedef struct _socket_t {
   clib_socket_addr_t self_addr, peer_addr;
 } clib_socket_t;
 
+#ifndef CLIB_SOCKET_BUFFER_ALIGN
+#define CLIB_SOCKET_BUFFER_ALIGN 64
+#endif
+
+always_inline void
+clib_socket_buffer_free (u8 * b)
+{ vec_free_h (b, sizeof (clib_socket_buffer_header_t)); }
+
 always_inline void
 clib_socket_free (clib_socket_t *s)
 {
@@ -78,11 +92,11 @@ clib_socket_free (clib_socket_t *s)
   for (i = 0; i < n; i++)
     {
       u8 * b = * clib_fifo_elt_at_index (s->tx_buffer_fifo, i);
-      vec_free (b);
+      clib_socket_buffer_free (b);
     }
   clib_fifo_free (s->tx_buffer_fifo);
   vec_free (s->tx_buffer_iovecs);
-  vec_free (s->tx_buffer);
+  clib_socket_buffer_free (s->current_tx_buffer);
   vec_free (s->rx_buffer);
   if (clib_mem_is_heap_object (s->config))
     vec_free (s->config);
@@ -95,30 +109,62 @@ clib_error_t * clib_socket_init (clib_socket_t * socket);
 clib_error_t * clib_socket_accept (clib_socket_t * server, clib_socket_t * client);
 
 always_inline void *
-clib_socket_tx_add (clib_socket_t * s, int n_bytes)
+clib_socket_tx_add2_with_offset (clib_socket_t * s, uword n_bytes, uword offset)
 {
   u8 * result;
-  vec_add2 (s->tx_buffer, result, n_bytes);
+  clib_socket_buffer_header_t * bh;
+
+  vec_add2_ha (s->current_tx_buffer, result, n_bytes,
+               sizeof (clib_socket_buffer_header_t), CLIB_SOCKET_BUFFER_ALIGN);
+
+  bh = vec_header (s->current_tx_buffer, sizeof (bh[0]));
+  bh->offset = offset;
+
   return result;
 }
 
-always_inline void
-clib_socket_tx_add_va_formatted (clib_socket_t * s, char * fmt, va_list * va)
-{ s->tx_buffer = va_format (s->tx_buffer, fmt, va); }
+always_inline void *
+clib_socket_tx_add2 (clib_socket_t * s, uword n_bytes)
+{ return clib_socket_tx_add2_with_offset (s, n_bytes, /* offset */ 0); }
+
+always_inline void *
+clib_socket_tx_add_with_offset (clib_socket_t * s, void * data, uword n_bytes, uword offset)
+{
+  void * d = clib_socket_tx_add2_with_offset (s, n_bytes, offset);
+  memcpy (d, data, n_bytes);
+  return d;
+}
+
+always_inline void *
+clib_socket_tx_add (clib_socket_t * s, void * data, uword n_bytes)
+{ return clib_socket_tx_add_with_offset (s, data, n_bytes, /* offset */ 0); }
 
 always_inline void
-clib_socket_tx_add_to_buffer_fifo_vector (clib_socket_t * s, u8 * buffer)
+clib_socket_tx_add_va_formatted (clib_socket_t * s, char * fmt, va_list * va)
 {
-  /* Buffer will be freed on transmit. */
-  clib_fifo_add1 (s->tx_buffer_fifo, buffer);
+  vec_reset_length (s->tx_add_formatted_buffer);
+  s->tx_add_formatted_buffer = va_format (s->tx_add_formatted_buffer, fmt, va);
+  vec_add_ha (s->current_tx_buffer, s->tx_add_formatted_buffer, vec_len (s->tx_add_formatted_buffer),
+              sizeof (clib_socket_buffer_header_t), CLIB_SOCKET_BUFFER_ALIGN);
 }
 
 always_inline void
 clib_socket_tx_add_to_buffer_fifo (clib_socket_t * s, u8 * data, uword n_data)
 {
   u8 * buffer = 0;
-  vec_add (buffer, data, n_data);
-  clib_socket_tx_add_to_buffer_fifo_vector (s, buffer);
+
+  vec_add_ha (buffer, data, n_data,
+              sizeof (clib_socket_buffer_header_t), CLIB_SOCKET_BUFFER_ALIGN);
+
+  /* Buffer will be freed on transmit. */
+  clib_fifo_add1 (s->tx_buffer_fifo, buffer);
+}
+
+always_inline uword
+clib_socket_tx_data_is_available_to_write (clib_socket_t * s)
+{
+  return (vec_len (s->current_tx_buffer) > 0
+          || clib_fifo_elts (s->tx_buffer_fifo) > 0);
 }
 
 void clib_socket_tx_add_formatted (clib_socket_t * s, char * fmt, ...);

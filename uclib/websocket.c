@@ -39,13 +39,13 @@ websocket_main_close_socket (websocket_main_t * wsm, websocket_socket_t * ws, cl
   clib_socket_t * s = &ws->clib_socket;
   unix_file_poller_file_t * f;
 
+  if (wsm->connection_will_close)
+    wsm->connection_will_close (wsm, ws->index, error);
+
   if (wsm->verbose)
     clib_warning ("close connection %U -> %U",
                   format_sockaddr, &s->self_addr,
                   format_sockaddr, &s->peer_addr);
-
-  if (wsm->connection_will_close)
-    wsm->connection_will_close (wsm, ws->index, error);
 
   f = unix_file_poller_get_file (wsm->unix_file_poller, ws->unix_file_poller_file_index);
   unix_file_poller_del_file (wsm->unix_file_poller, f);
@@ -121,12 +121,11 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
   h += 2;
   if (n_bytes_of_payload >= 126)
     {
-#define _(i) ((u64) h[i] << (u64) (8*(7-i)))
       if (n_bytes_of_payload == 126)
-        n_bytes_of_payload = _ (0) | _ (1);
+        n_bytes_of_payload = (h[0] << 8) | h[1];
       else
-        n_bytes_of_payload = (  _ (0) | _ (1) | _ (2) | _ (3)
-                                | _ (4) | _ (5) | _ (6) | _ (7));
+#define _(i) ((u64) h[i] << (u64) (8*(7-i)))
+        n_bytes_of_payload = _ (0) | _ (1) | _ (2) | _ (3) | _ (4) | _ (5) | _ (6) | _ (7);
 #undef _
     }
 
@@ -160,12 +159,12 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
     }
 
   ASSERT (wsm->rx_frame_payload);
-  wsm->rx_frame_payload (wsm, ws, s->rx_buffer + n_bytes_in_frame_header, n_bytes_of_payload);
+  error = wsm->rx_frame_payload (wsm, ws, s->rx_buffer + n_bytes_in_frame_header, n_bytes_of_payload);
 
   /* Remove header and payload from receive buffer. */
   vec_delete (s->rx_buffer, n_bytes_in_frame_header + n_bytes_of_payload, 0);
 
-  rx_frame_parsed = 1;
+  rx_frame_parsed = error == 0;
 
  done:
   if (error)
@@ -498,16 +497,14 @@ websocket_client_file_write_ready (unix_file_poller_file_t * f)
            format_base64_data, ws->client.sec_websocket_key_random_bytes, sizeof (ws->client.sec_websocket_key_random_bytes));
       }
   }
-  else
-    {
-      error = clib_socket_tx (s);
-      if (error && unix_error_is_fatal (errno))
-        return error;
-    }
+
+  error = clib_socket_tx (s);
+  if (error && unix_error_is_fatal (errno))
+    return error;
 
   unix_file_poller_set_data_available_to_write (wsm->unix_file_poller,
                                                 f - wsm->unix_file_poller->file_pool,
-                                                vec_len (s->tx_buffer) > 0);
+                                                clib_socket_tx_data_is_available_to_write (s));
 
   return error;
 }
@@ -551,7 +548,8 @@ void websocket_close_all_sockets_with_no_handshake (websocket_main_t * wsm)
   pool_foreach (ws, wsm->socket_pool, ({
     if (! ws->is_server_client)
       continue;
-    if (time_now - ws->time_stamp_of_connection_creation > wsm->rx_handshake_timeout_in_sec)
+    if (! ws->handshake_rx
+        && time_now - ws->time_stamp_of_connection_creation > wsm->rx_handshake_timeout_in_sec)
       close_bitmap = clib_bitmap_ori (close_bitmap, ws->index);
   }));
 
@@ -580,7 +578,7 @@ static clib_error_t * websocket_socket_tx_frame_helper (websocket_socket_t * ws,
   *f++ = (WEBSOCKET_DATA_FRAMING_IS_FINAL_FRAGMENT |
           (is_binary ? WEBSOCKET_DATA_FRAMING_OPCODE_BINARY_DATA : WEBSOCKET_DATA_FRAMING_OPCODE_TEXT_DATA));
 
-  l = vec_len (s->tx_buffer);
+  l = vec_len (s->current_tx_buffer);
   if (l < 126)
     *f++ = l;
   else if (l < (1 << 16))

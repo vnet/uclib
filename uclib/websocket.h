@@ -58,6 +58,23 @@ typedef struct {
   };
 } websocket_socket_t;
 
+typedef enum {
+  WEBSOCKET_CONNECTION_TYPE_SERVER_LISTEN,
+  WEBSOCKET_CONNECTION_TYPE_SERVER_CLIENT,
+  WEBSOCKET_CONNECTION_TYPE_CLIENT,
+} websocket_connection_type_t;
+
+always_inline websocket_connection_type_t
+websocket_connection_type (websocket_socket_t * ws)
+{
+  clib_socket_t * s = &ws->clib_socket;
+  return (s->is_server
+          ? WEBSOCKET_CONNECTION_TYPE_SERVER_LISTEN
+          : (ws->is_server_client
+             ? WEBSOCKET_CONNECTION_TYPE_SERVER_CLIENT
+             : WEBSOCKET_CONNECTION_TYPE_CLIENT));
+}
+
 always_inline void
 websocket_socket_free (websocket_socket_t * ws)
 {
@@ -102,7 +119,8 @@ typedef struct websocket_main_t {
   /* Frames with payload larger than this size will cause connection to close. */
   u64 max_n_bytes_in_payload;
 
-  void (* rx_frame_payload) (struct websocket_main_t * wsm, websocket_socket_t * c, u8 * rx_payload, u32 n_payload_bytes);
+  clib_error_t *
+  (* rx_frame_payload) (struct websocket_main_t * wsm, websocket_socket_t * c, u8 * rx_payload, u32 n_payload_bytes);
 
   void (* new_client_for_server) (struct websocket_main_t * wsm,
                                   u32 client_ws_index,

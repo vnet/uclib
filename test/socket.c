@@ -182,7 +182,7 @@ socket_client_file_write_ready (unix_file_poller_file_t * f)
 
   unix_file_poller_set_data_available_to_write (&tsm->unix_file_poller,
                                                 f - tsm->unix_file_poller.file_pool,
-                                                vec_len (s->tx_buffer) > 0);
+                                                clib_socket_tx_data_is_available_to_write (s));
 
   return error;
 }
