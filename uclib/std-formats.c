@@ -165,6 +165,92 @@ u8 * format_time_interval (u8 * s, va_list * args)
   return s;
 }
 
+u8 * format_timeval (u8 * s, va_list * args)
+{
+  char * fmt = va_arg (*args, char *);
+  struct timeval * tv = va_arg (*args, struct timeval *);
+  struct tm * tm;
+  word msec;
+  char * f, c;
+
+  if (! fmt)
+    fmt = "y/m/d H:M:S:F";
+
+  if (! tv)
+    {
+      static struct timeval now;
+      gettimeofday (&now, 0);
+      tv = &now;
+    }
+
+  msec = flt_round_nearest (1e-3 * tv->tv_usec);
+  if (msec >= 1000)
+    { msec = 0; tv->tv_sec++; }
+
+  {
+    time_t t = tv->tv_sec;
+    tm = localtime (&t);
+  }
+
+  for (f = fmt; *f; f++)
+    {
+      uword what;
+      char * what_fmt = "%d";
+
+      switch (c = *f)
+	{
+	default:
+	  vec_add1 (s, c);
+	  continue;
+
+	case 'y':
+	  what = 1900 + tm->tm_year;
+	  what_fmt = "%4d";
+	  break;
+	case 'm':
+	  what = tm->tm_mon + 1;
+	  what_fmt = "%02d";
+	  break;
+	case 'd':
+	  what = tm->tm_mday;
+	  what_fmt = "%02d";
+	  break;
+	case 'H':
+	  what = tm->tm_hour;
+	  what_fmt = "%02d";
+	  break;
+	case 'M':
+	  what = tm->tm_min;
+	  what_fmt = "%02d";
+	  break;
+	case 'S':
+	  what = tm->tm_sec;
+	  what_fmt = "%02d";
+	  break;
+	case 'F':
+	  what = msec;
+	  what_fmt = "%03d";
+	  break;
+	}
+
+      s = format (s, what_fmt, what);
+    }
+
+  return s;
+}
+
+u8 * format_time_float (u8 * s, va_list * args)
+{
+  u8 * fmt = va_arg (*args, u8 *);
+  f64 t = va_arg (*args, f64);
+  struct timeval tv;
+  if (t <= 0)
+    t = unix_time_now ();
+  tv.tv_sec = t;
+  tv.tv_usec = 1e6*(t - tv.tv_sec);
+  return format (s, "%U", format_timeval, fmt, &tv);
+}
+
 /* Unparse memory size e.g. 100, 100k, 100m, 100g. */
 u8 * format_memory_size (u8 * s, va_list * va)
 {
@@ -287,4 +373,3 @@ u8 * format_sockaddr (u8 * s, va_list * args)
 
   return s;
 }
-
