@@ -58,6 +58,15 @@ url_free (url_t * u)
 foreach_url_component
 #undef _
 
+always_inline char *
+url_socket_config (url_t * u)
+{
+  return (char *) format (0, "%v%s%v",
+                          url_host (u),
+                          url_port (u) ? ":" : "",
+                          url_port (u));
+}
+
 clib_error_t * url_parse_components (u8 * url_string, url_t * url);
 
 #endif /* included_uclib_url_h */

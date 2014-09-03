@@ -154,6 +154,6 @@ void websocket_server_add_host (websocket_main_t * wsm, char * fmt, ...);
 clib_error_t * websocket_server_add_listener (websocket_main_t * wsm, char * config, u32 * ws_index);
 
 clib_error_t *
-websocket_client_add_connection (websocket_main_t * wsm, char * config, char * url, u32 * ws_index);
+websocket_client_add_connection (websocket_main_t * wsm, u32 * ws_index, char * url_format, ...);
 
 #endif /* included_clib_websocket_h */

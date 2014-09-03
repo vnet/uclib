@@ -151,7 +151,6 @@ int test_websocket_main (unformat_input_t * input)
     u32 listen_ws_index;
     char * client_socket_config;
     char * host = "foo.bar.com";
-    char * client_url = (char *) format (0, "ws://%s/path/to?a=10&b=20", host);
 
     if (0)
       websocket_server_add_host (wsm, host);
@@ -172,7 +171,8 @@ int test_websocket_main (unformat_input_t * input)
         u32 client_ws_index;
         test_websocket_socket_t * tws;
 
-        error = websocket_client_add_connection (wsm, client_socket_config, client_url, &client_ws_index);
+        error = websocket_client_add_connection (wsm, &client_ws_index,
+                                                 "ws://%s/path/to?a=10&b=20", client_socket_config);
         if (error)
           goto done;
 

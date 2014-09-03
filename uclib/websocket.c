@@ -70,100 +70,108 @@ websocket_rx_handshake_timeout (websocket_main_t * wsm, websocket_socket_t * ws)
 
 static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
 {
+  u32 n_left_in_rx_buffer;
   u32 payload_byte_size, n_bytes_in_frame_header;
   u64 n_bytes_of_payload;
   u8 frame_mask[4];
-  u8 * h, is_masked;
+  u8 * rx, * rx_frame_start, is_masked;
   clib_socket_t * s = &ws->clib_socket;
   clib_error_t * error = 0;
   uword rx_frame_parsed = 0;
 
-  /* Shortest valid frame: 2 bytes header + 0 bytes of payload. */
-  if (vec_len (s->rx_buffer) < 2)
-    goto done;
+  rx = s->rx_buffer;
+  n_left_in_rx_buffer = vec_len (s->rx_buffer);
 
-  h = s->rx_buffer;
-
-  /* Keep it simple: no support for fragmentation. */
-  if (! (h[0] & WEBSOCKET_DATA_FRAMING_IS_FINAL_FRAGMENT))
+  while (1)
     {
-      error = clib_error_return (0, "no support for fragmentation (opcode 0x%x)", h[0]);
-      goto done;
-    }
+      /* Shortest valid frame: 2 bytes header + 0 bytes of payload. */
+      if (n_left_in_rx_buffer < 2)
+        goto done;
 
-  switch (h[0] & 0xf)
-    {
-    case WEBSOCKET_DATA_FRAMING_OPCODE_BINARY_DATA:
-    case WEBSOCKET_DATA_FRAMING_OPCODE_TEXT_DATA:
-      break;
+      /* Keep it simple: no support for fragmentation. */
+      rx_frame_start = rx;
+      if (! (rx[0] & WEBSOCKET_DATA_FRAMING_IS_FINAL_FRAGMENT))
+        {
+          error = clib_error_return (0, "no support for fragmentation (opcode 0x%x)", rx[0]);
+          goto done;
+        }
 
-    case WEBSOCKET_DATA_FRAMING_OPCODE_CLOSE:
-      error = clib_error_return (0, "close opcode received");
-      goto done;
+      switch (rx[0] & 0xf)
+        {
+        case WEBSOCKET_DATA_FRAMING_OPCODE_BINARY_DATA:
+        case WEBSOCKET_DATA_FRAMING_OPCODE_TEXT_DATA:
+          break;
 
-    default:
-      error = clib_error_return (0, "unknown opcode 0x%x", h[0]);
-      goto done;
-    }
+        case WEBSOCKET_DATA_FRAMING_OPCODE_CLOSE:
+          error = clib_error_return (0, "close opcode received");
+          goto done;
 
-  is_masked = (h[1] & WEBSOCKET_DATA_FRAMING_PAYLOAD_IS_MASKED) != 0;
+        default:
+          error = clib_error_return (0, "unknown opcode 0x%x", rx[0]);
+          goto done;
+        }
 
-  n_bytes_of_payload = h[1] & 0x7f;
+      is_masked = (rx[1] & WEBSOCKET_DATA_FRAMING_PAYLOAD_IS_MASKED) != 0;
 
-  payload_byte_size = 0;
-  payload_byte_size = n_bytes_of_payload == 126 ? 2 : payload_byte_size;
-  payload_byte_size = n_bytes_of_payload == 127 ? 8 : payload_byte_size;
+      n_bytes_of_payload = rx[1] & 0x7f;
 
-  n_bytes_in_frame_header = 2 + (is_masked ? sizeof (u32) : 0) + payload_byte_size;
-  if (vec_len (s->rx_buffer) < n_bytes_in_frame_header)
-    goto done;
+      payload_byte_size = 0;
+      payload_byte_size = n_bytes_of_payload == 126 ? 2 : payload_byte_size;
+      payload_byte_size = n_bytes_of_payload == 127 ? 8 : payload_byte_size;
 
-  h += 2;
-  if (n_bytes_of_payload >= 126)
-    {
-      if (n_bytes_of_payload == 126)
-        n_bytes_of_payload = (h[0] << 8) | h[1];
-      else
-#define _(i) ((u64) h[i] << (u64) (8*(7-i)))
-        n_bytes_of_payload = _ (0) | _ (1) | _ (2) | _ (3) | _ (4) | _ (5) | _ (6) | _ (7);
+      n_bytes_in_frame_header = 2 + (is_masked ? sizeof (u32) : 0) + payload_byte_size;
+      if (n_left_in_rx_buffer < n_bytes_in_frame_header)
+        goto done;
+
+      rx += 2;
+      if (n_bytes_of_payload >= 126)
+        {
+          if (n_bytes_of_payload == 126)
+            n_bytes_of_payload = (rx[0] << 8) | rx[1];
+          else
+#define _(i) ((u64) rx[i] << (u64) (8*(7-i)))
+            n_bytes_of_payload = _ (0) | _ (1) | _ (2) | _ (3) | _ (4) | _ (5) | _ (6) | _ (7);
 #undef _
+        }
+
+      /* Bit 63 (sign bit) must be clear.  Enforce this by having a sane
+         max payload size. */
+      if (n_bytes_of_payload > wsm->max_n_bytes_in_payload)
+        {
+          error = clib_error_return (0, "payload overflow %Ld > %Ld",
+                                     n_bytes_of_payload, wsm->max_n_bytes_in_payload);
+          goto done;
+        }
+
+      rx += payload_byte_size;
+
+      memset (frame_mask, 0, sizeof (frame_mask));
+      if (is_masked)
+        {
+          /* Host byte order. */
+          memcpy (frame_mask, rx, sizeof (frame_mask));
+          rx += sizeof (frame_mask);
+        }
+
+      if (n_left_in_rx_buffer < n_bytes_in_frame_header + n_bytes_of_payload)
+        goto done;
+
+      if (is_masked)
+        {
+          int i;
+          for (i = 0; i < n_bytes_of_payload; i++)
+            rx_frame_start[n_bytes_in_frame_header + i] ^= frame_mask[i % sizeof (frame_mask)];
+        }
+
+      ASSERT (wsm->rx_frame_payload);
+      error = wsm->rx_frame_payload (wsm, ws, rx_frame_start + n_bytes_in_frame_header, n_bytes_of_payload);
+
+      n_left_in_rx_buffer -= n_bytes_in_frame_header + n_bytes_of_payload;
+      rx = rx_frame_start + n_bytes_in_frame_header + n_bytes_of_payload;
     }
-
-  /* Bit 63 (sign bit) must be clear.  Enforce this by having a sane
-     max payload size. */
-  if (n_bytes_of_payload > wsm->max_n_bytes_in_payload)
-    {
-      error = clib_error_return (0, "payload overflow %Ld > %Ld",
-                                 n_bytes_of_payload, wsm->max_n_bytes_in_payload);
-      goto done;
-    }
-
-  h += payload_byte_size;
-
-  memset (frame_mask, 0, sizeof (frame_mask));
-  if (is_masked)
-    {
-      /* Host byte order. */
-      memcpy (frame_mask, h, sizeof (frame_mask));
-      h += sizeof (frame_mask);
-    }
-
-  if (vec_len (s->rx_buffer) < n_bytes_in_frame_header + n_bytes_of_payload)
-    goto done;
-
-  if (is_masked)
-    {
-      int i;
-      for (i = 0; i < n_bytes_of_payload; i++)
-        s->rx_buffer[n_bytes_in_frame_header + i] ^= frame_mask[i % sizeof (frame_mask)];
-    }
-
-  ASSERT (wsm->rx_frame_payload);
-  error = wsm->rx_frame_payload (wsm, ws, s->rx_buffer + n_bytes_in_frame_header, n_bytes_of_payload);
 
   /* Remove header and payload from receive buffer. */
-  vec_delete (s->rx_buffer, n_bytes_in_frame_header + n_bytes_of_payload, 0);
-
+  vec_delete (s->rx_buffer, rx - s->rx_buffer, 0);
   rx_frame_parsed = error == 0;
 
  done:
@@ -667,27 +675,33 @@ websocket_server_add_listener (websocket_main_t * wsm, char * config, u32 * ws_i
 }
 
 clib_error_t *
-websocket_client_add_connection (websocket_main_t * wsm, char * config, char * url, u32 * ws_index)
+websocket_client_add_connection (websocket_main_t * wsm, u32 * ws_index, char * url_format, ...)
 {
-  clib_error_t * error = 0;
+  va_list va;
   websocket_socket_t * ws;
   clib_socket_t * s;
   unix_file_poller_file_t pf;
+  clib_error_t * error = 0;
+  u8 * url = 0;
+
+  va_start (va, url_format);
+  url = va_format (0, url_format, &va);
+  va_end (va);
 
   ws = websocket_socket_alloc (wsm);
 
-  s = &ws->clib_socket;
-  s->is_client = 1;
-  s->non_blocking_connect = 1;
-  s->config = config;
-  error = clib_socket_init (s);
-  if (error)
-    goto done;
-        
   error = url_parse_components ((u8 *) url, &ws->client.url);
   if (error)
     goto done;
 
+  s = &ws->clib_socket;
+  s->is_client = 1;
+  s->non_blocking_connect = 1;
+  s->config = url_socket_config (&ws->client.url);
+  error = clib_socket_init (s);
+  if (error)
+    goto done;
+        
   memset (&pf, 0, sizeof (pf));
   pf.read_function = websocket_client_file_read_ready;
   pf.write_function = websocket_client_file_write_ready;
@@ -707,6 +721,7 @@ done:
     }
   else
     *ws_index = ws->index;
+  vec_free (url);
 
   return error;
 }
