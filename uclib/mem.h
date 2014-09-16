@@ -27,13 +27,15 @@ always_inline void * clib_mem_get_per_cpu_heap (void)
   return clib_per_cpu_mheaps[cpu];
 }
 
-always_inline void * clib_mem_set_per_cpu_heap (u8 * new)
+always_inline void * clib_mem_set_heap_for_cpu (void * heap, uword cpu)
 {
-  int cpu = os_get_cpu_number ();
   void * old = clib_per_cpu_mheaps[cpu];
-  clib_per_cpu_mheaps[cpu] = new;
+  clib_per_cpu_mheaps[cpu] = heap;
   return old;
 }
+
+always_inline void * clib_mem_set_per_cpu_heap (u8 * new)
+{ return clib_mem_set_heap_for_cpu (new, os_get_cpu_number ()); }
 
 /* Memory allocator which returns null when it fails. */
 always_inline void *

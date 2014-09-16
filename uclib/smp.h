@@ -24,39 +24,6 @@
 #ifndef included_clib_smp_h
 #define included_clib_smp_h
 
-/* Per-CPU state. */
-typedef struct {
-  /* Per-cpu local heap. */
-  void * heap;
-
-  u32 thread_id;
-} clib_smp_per_cpu_main_t;
-
-typedef struct {
-  /* Number of CPUs used to model current computer. */
-  u32 n_cpus;
-
-  /* Number of cpus that are done and have exited. */
-  u32 n_cpus_exited;
-
-  /* Log2 stack and vm (heap) size. */
-  u8 log2_n_per_cpu_stack_bytes, log2_n_per_cpu_vm_bytes;
-
-  /* Thread local store (TLS) is stored at stack top.
-     Number of 4k pages to allocate for TLS. */
-  u16 n_tls_4k_pages;
-
-  /* Per cpus stacks/heaps start at these addresses. */
-  void * vm_base;
-
-  /* Thread-safe global heap.  Objects here can be allocated/freed by any cpu. */
-  void * global_heap;
-
-  clib_smp_per_cpu_main_t * per_cpu_mains;
-} clib_smp_main_t;
-
-extern clib_smp_main_t clib_smp_main;
-
 always_inline void *
 clib_smp_vm_base_for_cpu (clib_smp_main_t * m, uword cpu)
 {
@@ -64,11 +31,19 @@ clib_smp_vm_base_for_cpu (clib_smp_main_t * m, uword cpu)
 }
 
 always_inline void *
-clib_smp_stack_top_for_cpu (clib_smp_main_t * m, uword cpu)
+clib_smp_stack_start_for_cpu (clib_smp_main_t * m, uword cpu)
 {
   /* Stack is at top of per cpu VM area. */
   return clib_smp_vm_base_for_cpu (m, cpu + 1) - ((uword) 1 << m->log2_n_per_cpu_stack_bytes);
 }
+
+always_inline clib_smp_per_cpu_main_t *
+clib_smp_get_per_cpu_main_for_cpu (uword for_cpu)
+{ return clib_smp_main.per_cpu_mains + for_cpu; }
+
+always_inline clib_smp_per_cpu_main_t *
+clib_smp_get_per_cpu_main (uword for_cpu)
+{ return clib_smp_main.per_cpu_mains + os_get_cpu_number (); }
 
 #define clib_smp_compare_and_swap(addr,new,old) __sync_val_compare_and_swap(addr,old,new)
 #define clib_smp_swap(addr,new) __sync_lock_test_and_set(addr,new)
