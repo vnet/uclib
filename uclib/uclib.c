@@ -14,6 +14,7 @@
 #include <uclib/base64.c>
 #include <uclib/crypto.c>
 #include <uclib/elog.c>
+#include <uclib/fheap.c>
 #include <uclib/fifo.c>
 #include <uclib/hash.c>
 #include <uclib/heap.c>

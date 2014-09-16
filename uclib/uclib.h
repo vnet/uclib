@@ -171,6 +171,7 @@ always_inline uword max_pow2 (uword x)
   _x < 0 ? -_x : _x;				\
 })
 
+#include <uclib/smp_bootstrap.h>
 #include <uclib/os.h>
 #include <uclib/cache.h>
 #include <uclib/error_bootstrap.h>
@@ -209,6 +210,7 @@ always_inline uword max_pow2 (uword x)
 #include <uclib/zvec.h>
 
 #include <uclib/elog.h>
+#include <uclib/fheap.h>
 #include <uclib/http.h>
 #include <uclib/socket.h>
 #include <uclib/unix.h>
