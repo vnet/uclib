@@ -215,9 +215,15 @@ mheap_vm (void * v,
     {
       mapped_bytes = end_page - start_page;
       if (flags & MHEAP_VM_MAP)
-	clib_mem_vm_map ((void *) start_page, end_page - start_page);
+        {
+          void * r = clib_mem_vm_map ((void *) start_page, end_page - start_page);
+          ASSERT (r != 0);
+        }
       else if (flags & MHEAP_VM_UNMAP)
-	clib_mem_vm_unmap ((void *) start_page, end_page - start_page);
+        {
+          void * r = clib_mem_vm_unmap ((void *) start_page, end_page - start_page);
+          ASSERT (r != 0);
+        }
     }
 
   return mapped_bytes;
@@ -515,6 +521,11 @@ mheap_get_extend_vector (void * v,
 
       /* Create first element of heap. */
       e = mheap_elt_at_uoffset (v, _vec_len (v));
+
+      if (! (h->flags & MHEAP_FLAG_DISABLE_VM))
+        mheap_vm (v, MHEAP_VM_MAP | MHEAP_VM_ROUND_UP,
+                  pointer_to_uword (e), sizeof (e[0]));
+
       e->prev_n_user_data = MHEAP_N_USER_DATA_INVALID;
     }
 
@@ -833,10 +844,6 @@ void * mheap_alloc_with_flags (void * memory, uword memory_size, uword flags)
 
     size = memory + memory_size - v;
   }
-
-  /* VM map header so we can use memory. */
-  if (! (flags & MHEAP_FLAG_DISABLE_VM))
-    clib_mem_vm_map (h, sizeof (h[0]));
 
   /* Zero vector header: both heap header and vector length. */
   memset (h, 0, sizeof (h[0]));

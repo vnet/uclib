@@ -27,18 +27,25 @@
 #include <unistd.h>
 #include <sys/mman.h>
 
+always_inline uword
+clib_mem_vm_mmap_base_flags ()
+{
+  uword flags = MAP_PRIVATE;
+
+#if defined (MAP_ANONYMOUS)
+  flags |= MAP_ANONYMOUS;
+#elif defined (MAP_ANON)
+  flags |= MAP_ANON;
+#endif
+
+  return flags;
+}
+
 /* Allocate virtual address space. */
 always_inline void * clib_mem_vm_alloc (uword size)
 {
   void * mmap_addr;
-  uword flags = MAP_PRIVATE;
-
-#ifdef MAP_ANONYMOUS
-  flags |= MAP_ANONYMOUS;
-#endif
-#ifdef MAP_ANON
-  flags |= MAP_ANON;
-#endif
+  uword flags = clib_mem_vm_mmap_base_flags ();
 
   mmap_addr = mmap (0, size, PROT_READ | PROT_WRITE, flags, -1, 0);
   if (mmap_addr == (void *) -1)
@@ -53,7 +60,7 @@ always_inline void clib_mem_vm_free (void * addr, uword size)
 always_inline void * clib_mem_vm_unmap (void * addr, uword size)
 {
   void * mmap_addr;
-  uword flags = MAP_PRIVATE | MAP_FIXED;
+  uword flags = clib_mem_vm_mmap_base_flags () | MAP_FIXED;
 
   /* To unmap we "map" with no protection.  If we actually called
      munmap then other callers could steal the address space.  By
@@ -69,7 +76,7 @@ always_inline void * clib_mem_vm_unmap (void * addr, uword size)
 always_inline void * clib_mem_vm_map (void * addr, uword size)
 {
   void * mmap_addr;
-  uword flags = MAP_PRIVATE | MAP_FIXED;
+  uword flags = clib_mem_vm_mmap_base_flags () | MAP_FIXED;
 
   mmap_addr = mmap (addr, size, (PROT_READ | PROT_WRITE), flags, -1, 0);
   if (mmap_addr == (void *) -1)
