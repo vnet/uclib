@@ -112,13 +112,14 @@ always_inline u64 clib_cpu_time_now (void)
 #include <sys/resource.h>
 #include <unistd.h>
 
-always_inline void
-unix_time_now_timespec (struct timespec * ts)
-{
 #ifdef __MACH__ // OS X does not have clock_gettime, use clock_get_time
+
 #include <mach/clock.h>
 #include <mach/mach.h>
 
+always_inline void
+unix_time_now_timespec (struct timespec * ts)
+{
   clock_serv_t cclock;
   mach_timespec_t mts;
   host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
@@ -126,13 +127,21 @@ unix_time_now_timespec (struct timespec * ts)
   mach_port_deallocate(mach_task_self(), cclock);
   ts->tv_sec = mts.tv_sec;
   ts->tv_nsec = mts.tv_nsec;
-#else
+}
+
+#endif
+
+#ifndef __MACH__
+
 #include <sys/syscall.h>
+always_inline void
+unix_time_now_timespec (struct timespec * ts)
+{
   /* clock_gettime without indirect syscall uses GLIBC wrappers which
      we don't want.  Just the bare metal, please. */
   syscall (SYS_clock_gettime, CLOCK_REALTIME, ts);
-#endif
 }
+#endif
 
 /* Use 64bit floating point to represent time offset from epoch. */
 always_inline f64 unix_time_now (void)
