@@ -74,10 +74,15 @@ always_inline u64 clib_cpu_time_now (void)
 
 always_inline u64 clib_cpu_time_now (void)
 {
+#ifdef __APPLE__
+  /* Apple disables this on iOS. */
+  return 0;
+#else
   u32 lo;
   asm volatile ("mrc p15, 0, %[lo], c15, c12, 1"
 		: [lo] "=r" (lo));
   return (u64) lo;
+#endif
 }
 
 #elif defined (__xtensa__)
