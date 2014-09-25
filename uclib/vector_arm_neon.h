@@ -40,7 +40,7 @@ always_inline u16 u8x16_compare_byte_mask (u8x16 x)
     x = vpaddq_u8 (x, x);       /* 8 results */
     x = vpaddq_u8 (x, x);       /* 4 results */
     x = vpaddq_u8 (x, x);       /* 2 results */
-    return vget_lane_u8 (x, 0) | (vget_lane_u8 (x, 1) << 8);
+    return vgetq_lane_u8 (x, 0) | (vgetq_lane_u8 (x, 1) << 8);
 #else
     {
         u8x8 hi, lo;

@@ -68,7 +68,7 @@ typedef long long i64;
 typedef unsigned int u32;
 typedef unsigned long long u64;
 
-#elif defined(alpha) || defined(__x86_64__) || defined (__powerpc64__)
+#elif defined(alpha) || defined(__x86_64__) || defined (__powerpc64__) || defined (__arm64__)
 
 #define log2_uword_bits 6
 

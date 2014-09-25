@@ -85,6 +85,19 @@ always_inline u64 clib_cpu_time_now (void)
 #endif
 }
 
+#elif defined (__arm64__)
+
+always_inline u64 clib_cpu_time_now (void)
+{
+#ifdef __APPLE__
+  /* Apple disables this on iOS. */
+  return 0;
+#else
+#error implement me
+  return 0;
+#endif
+}
+
 #elif defined (__xtensa__)
 
 /* Stub for now. */
