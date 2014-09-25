@@ -37,7 +37,10 @@
 #define CLIB_DEBUG 0
 #endif
 
-#if CLIB_DEBUG > 0
+#ifdef __clang__
+#define always_inline static inline __attribute__((__always_inline__, __nodebug__))
+#define static_always_inline always_inline
+#elif CLIB_DEBUG > 0
 #define always_inline static inline
 #define static_always_inline static inline
 #else
