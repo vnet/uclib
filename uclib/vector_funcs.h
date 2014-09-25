@@ -307,4 +307,21 @@ do {						\
 
 #undef _
 
+always_inline u32x u32x_splat (u32 x)
+{ return (u32x) {x, x, x, x}; }
+
+always_inline u32x
+u32x_rotate_left (u32x x, u32 i)
+{
+  u32x a = u32x_splat (i);
+  u32x b = u32x_splat (BITS (i) - i);
+  return (x << a) | (x >> b);
+}
+
+always_inline u8x16 u8x16_splat (u8 x)
+{ return (u8x16) {x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x}; }
+
+always_inline u8x16 u8x16_is_equal (u8x16 a, u8x16 b)
+{ return a == b; }
+
 #endif /* included_vector_funcs_h */

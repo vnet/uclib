@@ -117,6 +117,10 @@ _ (f64, 2);
 #include <uclib/vector_sse2.h>
 #endif
 
+#if defined (__ARM_NEON__) || defined (__arm64__)
+#include <uclib/vector_arm_neon.h>
+#endif
+
 #if CLIB_VECTOR_WORD_BITS > 0
 #include <uclib/vector_funcs.h>
 #endif
