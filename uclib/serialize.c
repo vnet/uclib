@@ -1243,12 +1243,14 @@ void unserialize_open_unix_file_descriptor (serialize_main_t * m, int fd)
 { serialize_open_unix_file_descriptor_helper (m, fd, /* is_read */ 1); }
 
 static clib_error_t *
-serialize_open_unix_file_helper (serialize_main_t * m, char * file, uword is_read)
+serialize_open_unix_file_helper (serialize_main_t * m, char * file, uword is_read,
+                                 int more_flags, int mode)
 {
-  int fd, mode;
+  int fd, flags;
 
-  mode = is_read ? O_RDONLY : O_RDWR | O_CREAT | O_TRUNC;
-  fd = open (file, mode, 0666);
+  flags = is_read ? O_RDONLY : O_RDWR | O_CREAT | O_TRUNC;
+  flags |= more_flags;
+  fd = open (file, flags, mode);
   if (fd < 0)
     return clib_error_return_unix (0, "open `%s'", file);
 
@@ -1258,8 +1260,22 @@ serialize_open_unix_file_helper (serialize_main_t * m, char * file, uword is_rea
 
 clib_error_t *
 serialize_open_unix_file (serialize_main_t * m, char * file)
-{ return serialize_open_unix_file_helper (m, file, /* is_read */ 0); }
+{
+  return serialize_open_unix_file_helper (m, file, /* is_read */ 0,
+                                          /* more_flags */ 0, /* mode */ 0666);
+}
 
 clib_error_t *
 unserialize_open_unix_file (serialize_main_t * m, char * file)
-{ return serialize_open_unix_file_helper (m, file, /* is_read */ 1); }
+{
+  return serialize_open_unix_file_helper (m, file, /* is_read */ 1,
+                                          /* more_flags */ 0, /* mode */ 0666);
+}
+
+clib_error_t *
+serialize_open_unix_file_with_flags_and_mode (serialize_main_t * m, char * file, int flags, int mode)
+{ return serialize_open_unix_file_helper (m, file, /* is_read */ 0, flags, mode); }
+
+clib_error_t *
+unserialize_open_unix_file_with_flags_and_mode (serialize_main_t * m, char * file, int flags, int mode)
+{ return serialize_open_unix_file_helper (m, file, /* is_read */ 1, flags, mode); }

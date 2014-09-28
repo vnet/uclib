@@ -94,6 +94,30 @@ static serialize_diff_type_t add_foo = {
 };
 CLIB_INIT_ADD (serialize_diff_type_t, add_foo);
 
+static void serialize_change_foo (serialize_main_t * sm, va_list * va)
+{
+  foo_main_t * fm = va_arg (*va, foo_main_t *);
+  foo_t * f = va_arg (*va, foo_t *);
+  ASSERT (! pool_is_free (fm->foo_pool, f));
+  serialize_likely_small_unsigned_integer (sm, f - fm->foo_pool);
+  serialize (sm, serialize_multiple_foos, f, 1);
+}
+
+static void unserialize_change_foo (serialize_main_t * sm, va_list * va)
+{
+  foo_main_t * fm = va_arg (*va, foo_main_t *);
+  u32 fi = unserialize_likely_small_unsigned_integer (sm);
+  foo_t * f = pool_elt_at_index (fm->foo_pool, fi);
+  unserialize (sm, unserialize_multiple_foos, f, 1);
+}
+
+static serialize_diff_type_t change_foo = {
+  .name = "change_foo",
+  .serialize = serialize_change_foo,
+  .unserialize = unserialize_change_foo,
+};
+CLIB_INIT_ADD (serialize_diff_type_t, change_foo);
+
 typedef struct {
   serialize_main_t serialize_main;
   foo_main_t foo_main[2];
@@ -112,13 +136,19 @@ int test_udb_main (unformat_input_t * input)
   pool_get (fm->foo_pool, f);
   f->a = 1; f->b = 2;
 
-  if ((error = serialize_open_unix_file (sm, "foos")))
+  if ((error = serialize_open_unix_file_with_flags_and_mode (sm, "foos", O_SYNC, 0666)))
     goto done;
   serialize (sm, serialize_foo_main, fm);
 
   pool_get (fm->foo_pool, f);
+
   f->a = 3; f->b = 4;
   serialize_diff (sm, &add_foo, fm, f);
+
+  f->a = 5; f->b = 6;
+  serialize_diff (sm, &change_foo, fm, f);
+
+  serialize_sync (sm);
 
   serialize_close (sm);
 

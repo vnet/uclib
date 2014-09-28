@@ -425,6 +425,8 @@ void unserialize_open_vector (serialize_main_t * m, u8 * vector);
 
 clib_error_t * serialize_open_unix_file (serialize_main_t * m, char * file);
 clib_error_t * unserialize_open_unix_file (serialize_main_t * m, char * file);
+clib_error_t * serialize_open_unix_file_with_flags_and_mode (serialize_main_t * m, char * file, int flags, int mode);
+clib_error_t * unserialize_open_unix_file_with_flags_and_mode (serialize_main_t * m, char * file, int flags, int mode);
 
 void serialize_open_unix_file_descriptor (serialize_main_t * m, int fd);
 void unserialize_open_unix_file_descriptor (serialize_main_t * m, int fd);
