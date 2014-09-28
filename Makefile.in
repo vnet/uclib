@@ -78,7 +78,7 @@ NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
 noinst_PROGRAMS = fheap$(EXEEXT) sha$(EXEEXT) socket$(EXEEXT) \
-	websocket$(EXEEXT)
+	websocket$(EXEEXT) serialize$(EXEEXT)
 subdir = .
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/configure $(am__configure_deps) depcomp \
@@ -97,6 +97,9 @@ am__dirstamp = $(am__leading_dot)dirstamp
 am_fheap_OBJECTS = test/fheap.$(OBJEXT)
 fheap_OBJECTS = $(am_fheap_OBJECTS)
 fheap_LDADD = $(LDADD)
+am_serialize_OBJECTS = test/serialize.$(OBJEXT)
+serialize_OBJECTS = $(am_serialize_OBJECTS)
+serialize_LDADD = $(LDADD)
 am_sha_OBJECTS = test/sha.$(OBJEXT)
 sha_OBJECTS = $(am_sha_OBJECTS)
 sha_LDADD = $(LDADD)
@@ -134,10 +137,10 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(fheap_SOURCES) $(sha_SOURCES) $(socket_SOURCES) \
-	$(websocket_SOURCES)
-DIST_SOURCES = $(fheap_SOURCES) $(sha_SOURCES) $(socket_SOURCES) \
-	$(websocket_SOURCES)
+SOURCES = $(fheap_SOURCES) $(serialize_SOURCES) $(sha_SOURCES) \
+	$(socket_SOURCES) $(websocket_SOURCES)
+DIST_SOURCES = $(fheap_SOURCES) $(serialize_SOURCES) $(sha_SOURCES) \
+	$(socket_SOURCES) $(websocket_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -300,6 +303,7 @@ fheap_SOURCES = test/fheap.c
 sha_SOURCES = test/sha.c
 socket_SOURCES = test/socket.c
 websocket_SOURCES = test/websocket.c
+serialize_SOURCES = test/serialize.c
 nobase_include_HEADERS = $(wildcard $(srcdir)/uclib/*.[ch])
 all: all-am
 
@@ -354,6 +358,12 @@ test/fheap.$(OBJEXT): test/$(am__dirstamp) \
 fheap$(EXEEXT): $(fheap_OBJECTS) $(fheap_DEPENDENCIES) $(EXTRA_fheap_DEPENDENCIES) 
 	@rm -f fheap$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(fheap_OBJECTS) $(fheap_LDADD) $(LIBS)
+test/serialize.$(OBJEXT): test/$(am__dirstamp) \
+	test/$(DEPDIR)/$(am__dirstamp)
+
+serialize$(EXEEXT): $(serialize_OBJECTS) $(serialize_DEPENDENCIES) $(EXTRA_serialize_DEPENDENCIES) 
+	@rm -f serialize$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(serialize_OBJECTS) $(serialize_LDADD) $(LIBS)
 test/sha.$(OBJEXT): test/$(am__dirstamp) \
 	test/$(DEPDIR)/$(am__dirstamp)
 
@@ -381,6 +391,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@test/$(DEPDIR)/fheap.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@test/$(DEPDIR)/serialize.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@test/$(DEPDIR)/sha.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@test/$(DEPDIR)/socket.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@test/$(DEPDIR)/websocket.Po@am__quote@

@@ -931,7 +931,8 @@ unserialize_elog_main (serialize_main_t * m, va_list * va)
   u32 rs;
 
   unserialize_check_magic (m, elog_serialize_magic,
-			   strlen (elog_serialize_magic));
+			   strlen (elog_serialize_magic),
+                           "elog_main");
 
   unserialize_integer (m, &rs, sizeof (u32));
   em->event_ring_size = rs;

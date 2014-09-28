@@ -24,11 +24,14 @@
 #ifndef included_clib_serialize_h
 #define included_clib_serialize_h
 
+#include <uclib/init.h>
+
 #include <stdarg.h>
 #include <setjmp.h>
 
 struct serialize_main_header_t;
 struct serialize_stream_t;
+struct serialize_diff_type_t;
 
 typedef void (serialize_data_function_t) (struct serialize_main_header_t * h,
 					  struct serialize_stream_t * s);
@@ -47,6 +50,9 @@ typedef struct serialize_stream_t {
      buffer to hold serialized/unserialized data. */
   u8 * overflow_buffer;
 
+  /* Diff types actually used to serialize data. */
+  struct serialize_diff_type_t * local_diff_types;
+
   /* Current index in overflow buffer for reads. */
   u32 current_overflow_index;
 
@@ -56,7 +62,7 @@ typedef struct serialize_stream_t {
 
   uword data_function_opaque;
 
-  u32 opaque[64 - 4 * sizeof (u32) - 1 * sizeof (uword) - 2 * sizeof (void *)];
+  u32 opaque[64 - 4 * sizeof (u32) - 1 * sizeof (uword) - 3 * sizeof (void *)];
 } serialize_stream_t;
 
 always_inline void
@@ -77,6 +83,11 @@ typedef struct serialize_main_header_t {
   jmp_buf error_longjmp;
 
   clib_error_t * error;
+
+  struct serialize_diff_type_t * global_diff_types;
+
+  /* Hash mapping change type name -> index. */
+  uword * global_diff_type_index_by_name;
 } serialize_main_header_t;
 
 always_inline void
@@ -126,14 +137,6 @@ typedef struct {
   serialize_stream_t stream;
 } serialize_main_t;
 
-always_inline void
-serialize_set_end_of_stream (serialize_main_t * m)
-{ serialize_stream_set_end_of_stream (&m->stream); }
-
-always_inline uword
-serialize_is_end_of_stream (serialize_main_t * m)
-{ return serialize_stream_is_end_of_stream (&m->stream); }
-
 typedef struct {
   serialize_main_header_t header;
   serialize_stream_t * streams;
@@ -148,6 +151,28 @@ unserialize_get (serialize_main_t * m, uword n_bytes)
 always_inline void *
 serialize_get (serialize_main_t * m, uword n_bytes)
 { return serialize_stream_read_write (&m->header, &m->stream, n_bytes, SERIALIZE_FLAG_IS_WRITE); }
+
+always_inline void
+serialize_set_end_of_stream (serialize_main_t * m)
+{ serialize_stream_set_end_of_stream (&m->stream); }
+
+always_inline uword
+serialize_is_end_of_stream (serialize_main_t * m)
+{ return serialize_stream_is_end_of_stream (&m->stream); }
+
+always_inline uword
+unserialize_is_end_of_stream (serialize_main_t * m)
+{
+  serialize_main_header_t * h = &m->header;
+  serialize_stream_t * s = &m->stream;
+  if (h->data_function
+      && vec_len (s->overflow_buffer) + s->n_buffer_bytes - s->current_buffer_index == 0)
+    {
+      h->data_function (h, s);
+      return serialize_stream_is_end_of_stream (s);
+    }
+  return 0;
+}
 
 always_inline void
 serialize_integer (serialize_main_t * m, u64 x, u32 n_bytes)
@@ -385,6 +410,8 @@ void unserialize_cstring (serialize_main_t * m, char ** string);
 void serialize_close (serialize_main_t * m);
 void unserialize_close (serialize_main_t * m);
 
+void serialize_sync (serialize_main_t * m);
+
 void serialize_open_data (serialize_main_t * m, u8 * data, uword n_data_bytes);
 void unserialize_open_data (serialize_main_t * m, u8 * data, uword n_data_bytes);
 
@@ -410,6 +437,19 @@ clib_error_t * unserialize (serialize_main_t * m, ...);
 clib_error_t * va_serialize (serialize_main_t * m, va_list * va);
 
 void serialize_magic (serialize_main_t * m, void * magic, u32 magic_bytes);
-void unserialize_check_magic (serialize_main_t * m, void * magic, u32 magic_bytes);
+void unserialize_check_magic (serialize_main_t * m, void * magic, u32 magic_bytes,
+                              char * type_for_error_message);
+
+typedef struct serialize_diff_type_t {
+  char * name;
+  serialize_function_t * serialize;
+  serialize_function_t * unserialize;
+  u32 global_diff_type_index;
+  u32 local_diff_type_index;
+} serialize_diff_type_t;
+CLIB_INIT_ADD_TYPE (serialize_diff_type_t);
+
+clib_error_t * serialize_diff (serialize_main_t * sm, serialize_diff_type_t * ct, ...);
+clib_error_t * unserialize_diff (serialize_main_t * sm, ...);
 
 #endif /* included_clib_serialize_h */

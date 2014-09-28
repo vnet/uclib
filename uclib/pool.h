@@ -36,13 +36,9 @@ typedef struct {
   u32 * free_indices;
 } pool_header_t;
 
-/* Align pool header so that pointers are naturally aligned. */
-#define pool_aligned_header_bytes \
-  vec_aligned_header_bytes (sizeof (pool_header_t), sizeof (void *))
-
 /* Get pool header from user pool pointer */
 always_inline pool_header_t * pool_header (void * v)
-{ return vec_aligned_header (v, sizeof (pool_header_t), sizeof (void *)); }
+{ return vec_header (v, sizeof (pool_header_t)); }
 
 /* Validate a pool */
 always_inline void pool_validate (void * v)
@@ -71,7 +67,7 @@ always_inline void pool_header_validate_index (void * v, uword index)
 do {								\
   uword __pool_validate_index = (i);				\
   vec_validate_ha ((v), __pool_validate_index,			\
-		   pool_aligned_header_bytes, /* align */ 0);		\
+		   sizeof (pool_header_t), /* align */ 0);      \
   pool_header_validate_index ((v), __pool_validate_index);	\
 } while (0)
 
@@ -159,7 +155,7 @@ do {									\
 		       /* length_increment */ 1,			\
 		       /* old length */ vec_len (P),			\
 		       /* elt size */ sizeof ((P)[0]),			\
-		       pool_aligned_header_bytes,			\
+		       sizeof (pool_header_t),				\
 		       /* align */ (A));				\
       E = vec_end (P) - 1;						\
     }									\
@@ -208,7 +204,7 @@ do {									\
 									\
   /* Add N elements to vector without changing length. */		\
   (P) = _vec_resize ((P), _pool_var(n), vec_len (P), sizeof (P[0]),	\
-		     pool_aligned_header_bytes,				\
+		     sizeof (pool_header_t),				\
 		     (A));						\
   _vec_len (P) -= _pool_var(n);						\
 									\
@@ -229,7 +225,7 @@ always_inline void * _pool_free (void * v)
     return v;
   clib_bitmap_free (p->free_bitmap);
   vec_free (p->free_indices);
-  vec_free_h (v, pool_aligned_header_bytes);
+  vec_free_h (v, sizeof (pool_header_t));
   return 0;
 }
 

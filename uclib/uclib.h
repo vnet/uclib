@@ -203,6 +203,7 @@ always_inline uword max_pow2 (uword x)
 #include <uclib/fifo.h>
 #include <uclib/hash.h>
 #include <uclib/heap.h>
+#include <uclib/init.h>
 #include <uclib/mhash.h>
 #include <uclib/pool.h>
 #include <uclib/random.h>

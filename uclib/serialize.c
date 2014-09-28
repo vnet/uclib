@@ -258,6 +258,10 @@ unserialize_vector_ha (serialize_main_t * m,
   unserialize_integer (m, &l, sizeof (l));
   if (l > max_length)
     serialize_error (&m->header, clib_error_create ("bad vector length %d", l));
+
+  if (l == 0)
+    return 0;
+
   p = v = _vec_resize (0, l, 0, elt_bytes, header_bytes, align);
 
   while (l != 0)
@@ -390,6 +394,7 @@ unserialize_pool_helper (serialize_main_t * m,
   vec_unserialize (m, &p->free_indices, unserialize_vec_32);
 
   /* Construct free bitmap. */
+  p->free_bitmap = 0;
   for (i = 0; i < vec_len (p->free_indices); i++)
     p->free_bitmap = clib_bitmap_ori (p->free_bitmap, p->free_indices[i]);
 
@@ -561,8 +566,8 @@ void serialize_magic (serialize_main_t * m, void * magic, u32 magic_bytes)
   memcpy (p, magic, magic_bytes);
 }
 
-void unserialize_check_magic (serialize_main_t * m, void * magic,
-			      u32 magic_bytes)
+void unserialize_check_magic (serialize_main_t * m, void * magic, u32 magic_bytes,
+                              char * type)
 {
   u32 l;
   void * d;
@@ -571,7 +576,7 @@ void unserialize_check_magic (serialize_main_t * m, void * magic,
   if (l != magic_bytes)
     {
     bad:
-      serialize_error_return (m, "bad magic number");
+      serialize_error_return (m, "bad magic number `%s'", type);
     }
   d = serialize_get (m, magic_bytes);
   if (memcmp (magic, d, magic_bytes))
@@ -589,7 +594,10 @@ va_serialize (serialize_main_t * sm, va_list * va)
   if (m->recursion_level == 1)
     {
       if (setjmp (m->error_longjmp))
-	error = m->error;
+        {
+          error = m->error;
+          m->error = 0;
+        }
     }
 	
   if (! error)
@@ -620,6 +628,107 @@ unserialize (serialize_main_t * m, ...)
   va_start (va, m);
   error = va_serialize (m, &va);
   va_end (va);
+  return error;
+}
+
+static void serialize_diff_init (serialize_main_header_t * h)
+{
+  serialize_diff_type_t * ict, * kct;
+  h->global_diff_type_index_by_name = hash_create_string (0, sizeof (uword));
+  foreach_clib_init_with_type (ict, serialize_diff_type_t, ({
+    vec_add2 (h->global_diff_types, kct, 1);
+    kct[0] = ict[0];
+    kct->global_diff_type_index = kct - h->global_diff_types;
+    kct->local_diff_type_index = ~0;
+    kct->name = (char *) format (0, "%s%c", kct->name, 0);
+    hash_set_mem (h->global_diff_type_index_by_name, kct->name, kct->global_diff_type_index);
+    ict->global_diff_type_index = kct->global_diff_type_index;
+    ict->local_diff_type_index = ~0;
+  }));
+}
+
+static void serialize_diff_maybe_init (serialize_main_header_t * h)
+{
+  if (! h->global_diff_types && CLIB_INIT_TYPE_IS_NON_EMPTY (serialize_diff_type_t))
+    serialize_diff_init (h);
+}
+
+static void serialize_diff_reset (serialize_main_header_t * h, serialize_stream_t * s)
+{
+  serialize_diff_type_t * kct;
+  vec_foreach (kct, h->global_diff_types)
+    kct->local_diff_type_index = ~0;
+  vec_reset_length (s->local_diff_types);
+}
+
+clib_error_t * serialize_diff (serialize_main_t * sm, serialize_diff_type_t * ct, ...)
+{
+  serialize_main_header_t * h = &sm->header;
+  serialize_stream_t * s = &sm->stream;
+  va_list va;
+
+  va_start (va, ct);
+
+  serialize_diff_maybe_init (h);
+
+  ct = vec_elt_at_index (h->global_diff_types, ct->global_diff_type_index);
+  if (ct->local_diff_type_index == ~0)
+    {
+      ct->local_diff_type_index = vec_len (s->local_diff_types);
+      vec_add1 (s->local_diff_types, ct[0]);
+    }
+  serialize_likely_small_unsigned_integer (sm, ct->local_diff_type_index);
+  if (ct->local_diff_type_index == vec_len (s->local_diff_types) - 1)
+    serialize_cstring (sm, ct->name);
+  ct->serialize (sm, &va);
+  va_end (va);
+  return sm->header.error;
+}
+
+clib_error_t * unserialize_diff (serialize_main_t * sm, ...)
+{
+  serialize_main_header_t * h = &sm->header;
+  serialize_stream_t * s = &sm->stream;
+  serialize_diff_type_t * ct;
+  clib_error_t * error = 0;
+  u32 index;
+  va_list va;
+
+  va_start (va, sm);
+  index = unserialize_likely_small_unsigned_integer (sm);
+  if (index >= vec_len (s->local_diff_types))
+    {
+      uword * p;
+      char * name;
+
+      if (index > vec_len (s->local_diff_types))
+        {
+          error = clib_error_return (0, "diff type index out of range %d; expected %d",
+                                     index, vec_len (s->local_diff_types));
+          goto done;
+        }
+
+      unserialize_cstring (sm, &name);
+
+      serialize_diff_maybe_init (h);
+
+      if (! (p = hash_get_mem (h->global_diff_type_index_by_name, name)))
+        {
+          error = clib_error_return (0, "unknown diff type `%s'", name);
+          vec_free (name);
+          goto done;
+        }
+
+      /* Inherit everything except index. */
+      ct = vec_elt_at_index (h->global_diff_types, p[0]);
+      vec_add1 (s->local_diff_types, ct[0]);
+    }
+
+  ct = vec_elt_at_index (s->local_diff_types, index);
+  ct->unserialize (sm, &va);
+  va_end (va);
+
+ done:
   return error;
 }
 
@@ -802,6 +911,18 @@ static void serialize_read_write_close (serialize_main_header_t * m, serialize_s
 void serialize_close (serialize_main_t * m)
 { serialize_read_write_close (&m->header, &m->stream, SERIALIZE_FLAG_IS_WRITE); }
 
+void serialize_sync (serialize_main_t * sm)
+{
+  serialize_main_header_t * m = &sm->header;
+  serialize_stream_t * s = &sm->stream;
+
+  /* "Write" 0 bytes to flush overflow vector. */
+  serialize_write_not_inline (m, s, /* n bytes */ 0, SERIALIZE_FLAG_IS_WRITE);
+
+  /* Call data function to flush buffer. */
+  m->data_function (m, s);
+}
+
 void unserialize_close (serialize_main_t * m)
 { serialize_read_write_close (&m->header, &m->stream, SERIALIZE_FLAG_IS_READ); }
 
@@ -810,6 +931,7 @@ void serialize_open_data (serialize_main_t * m, u8 * data, uword n_data_bytes)
   memset (m, 0, sizeof (m[0]));
   m->stream.buffer = data;
   m->stream.n_buffer_bytes = n_data_bytes;
+  serialize_diff_reset (&m->header, &m->stream);
 }
 
 void unserialize_open_data (serialize_main_t * m, u8 * data, uword n_data_bytes)
@@ -833,6 +955,7 @@ void serialize_open_vector (serialize_main_t * m, u8 * vector)
   m->stream.buffer = vector;
   m->stream.current_buffer_index = 0;
   m->stream.n_buffer_bytes = vec_len (vector);
+  serialize_diff_reset (&m->header, &m->stream);
 }
  
 void * serialize_close_vector (serialize_main_t * m)
@@ -1109,6 +1232,8 @@ serialize_open_unix_file_descriptor_helper (serialize_main_t * m, int fd, uword 
 
   m->header.data_function = is_read ? unix_file_read : unix_file_write;
   m->stream.data_function_opaque = fd;
+
+  serialize_diff_reset (&m->header, &m->stream);
 }
 
 void serialize_open_unix_file_descriptor (serialize_main_t * m, int fd)
