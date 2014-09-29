@@ -903,7 +903,8 @@ static void serialize_read_write_close (serialize_main_header_t * m, serialize_s
   serialize_stream_set_end_of_stream (s);
 
   /* Call it one last time to flush buffer and close. */
-  m->data_function (m, s);
+  if (s->current_buffer_index > 0)
+    m->data_function (m, s);
 
   vec_free (s->overflow_buffer);
 }
@@ -1222,6 +1223,7 @@ static void
 serialize_open_unix_file_descriptor_helper (serialize_main_t * m, int fd, uword is_read)
 {
   memset (m, 0, sizeof (m[0]));
+
   vec_resize (m->stream.buffer, 4096);
   
   if (! is_read)
