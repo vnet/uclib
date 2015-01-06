@@ -9,6 +9,7 @@ sha_SOURCES = test/sha.c
 socket_SOURCES = test/socket.c
 websocket_SOURCES = test/websocket.c
 serialize_SOURCES = test/serialize.c
+LDADD = libuclib.a
 
 lib_LIBRARIES = libuclib.a
 
