@@ -1007,8 +1007,10 @@ static u8 * format_mheap_byte_count (u8 * s, va_list * va)
   uword n_bytes = va_arg (*va, uword);
   if (n_bytes < 1024)
     return format (s, "%wd", n_bytes);
-  else
+  else if (n_bytes < (1 << 30))
     return format (s, "%wdk", n_bytes / 1024);
+  else
+    return format (s, "%.0fG", (f64) n_bytes / (f64) (1 << 30));
 }
 
 /* Returns first corrupt heap element. */
