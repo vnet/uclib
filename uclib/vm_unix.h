@@ -38,6 +38,10 @@ clib_mem_vm_mmap_base_flags ()
   flags |= MAP_ANON;
 #endif
 
+#if defined (MAP_NORESERVE)
+  flags |= MAP_NORESERVE;
+#endif
+
   return flags;
 }
 
