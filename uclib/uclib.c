@@ -1,3 +1,5 @@
+#include <uclib/uclib.h>
+
 #include <uclib/unix-misc.c>
 #include <uclib/smp.c>
 #include <uclib/backtrace.c>

@@ -10,6 +10,7 @@
 #define STRUCT_SIZE_OF(t,f)   (sizeof (_STRUCT_FIELD (t, f)))
 #define STRUCT_BITS_OF(t,f)   (BITS (_STRUCT_FIELD (t, f)))
 #define STRUCT_ARRAY_LEN(t,f) ARRAY_LEN (_STRUCT_FIELD (t, f))
+#define CONTAINER_OF(v, t, f) ((void *) (v) - STRUCT_OFFSET_OF (t,f))
 
 /* Stride in bytes between struct array elements. */
 #define STRUCT_STRIDE_OF(t,f)			\
