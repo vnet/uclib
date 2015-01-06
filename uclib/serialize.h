@@ -66,6 +66,13 @@ typedef struct serialize_stream_t {
 } serialize_stream_t;
 
 always_inline void
+serialize_stream_free (serialize_stream_t * s)
+{
+  vec_free (s->buffer);
+  vec_free (s->overflow_buffer);
+}
+
+always_inline void
 serialize_stream_set_end_of_stream (serialize_stream_t * s)
 { s->flags |= SERIALIZE_END_OF_STREAM; }
 
@@ -141,6 +148,11 @@ typedef struct {
   serialize_main_header_t header;
   serialize_stream_t * streams;
 } serialize_multiple_main_t;
+
+always_inline void serialize_main_free (serialize_main_t * m)
+{ serialize_stream_free (&m->stream); }
+always_inline void unserialize_main_free (serialize_main_t * m)
+{ serialize_main_free (m); }
 
 typedef void (serialize_function_t) (serialize_main_t * m, va_list * va);
 
