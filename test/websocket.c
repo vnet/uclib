@@ -1,5 +1,4 @@
 #include <uclib/uclib.h>
-#include <uclib/uclib.c>
 
 typedef struct {
   u32 websocket_socket_index;

@@ -1,5 +1,4 @@
 #include <uclib/uclib.h>
-#include <uclib/uclib.c>
 
 typedef struct {
   f64 time;

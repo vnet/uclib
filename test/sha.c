@@ -1,5 +1,4 @@
 #include <uclib/uclib.h>
-#include <uclib/uclib.c>
 
 /*
   Copyright (c) 2001, 2002, 2003 Eliot Dresselhaus

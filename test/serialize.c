@@ -1,5 +1,8 @@
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include <uclib/uclib.h>
-#include <uclib/uclib.c>
 
 typedef struct { u32 a, b; } foo_t;
 
