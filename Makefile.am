@@ -10,4 +10,8 @@ socket_SOURCES = test/socket.c
 websocket_SOURCES = test/websocket.c
 serialize_SOURCES = test/serialize.c
 
-nobase_include_HEADERS = $(wildcard $(srcdir)/uclib/*.[ch])
+lib_LIBRARIES = libuclib.a
+
+libuclib_a_SOURCES = uclib/uclib.c
+
+nobase_include_HEADERS = $(wildcard $(srcdir)/uclib/*.h)
