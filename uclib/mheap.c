@@ -236,7 +236,7 @@ mheap_vm_elt (void * v, uword flags, uword offset)
   clib_address_t start_addr, end_addr;
 
   e = mheap_elt_at_uoffset (v, offset);
-  start_addr = (clib_address_t) ((void *) e->user_data);
+  start_addr = (clib_address_t) ((void *) e + sizeof (e[0]));
   end_addr = (clib_address_t) mheap_next_elt (e);
   return mheap_vm (v, flags, start_addr, end_addr - start_addr);
 }
@@ -403,19 +403,20 @@ mheap_get_search_free_bin (void * v,
   if (! (h->flags & MHEAP_FLAG_DISABLE_VM))
     {
       mheap_elt_t * f0_elt = mheap_elt_at_uoffset (v, f0);
-      mheap_elt_t * f1_elt = mheap_elt_at_uoffset (v, f1);
+      mheap_elt_t * f1_elt = mheap_next_elt (f0_elt);
       mheap_elt_t * o0_elt = mheap_elt_at_uoffset (v, o0);
       mheap_elt_t * o1_elt = mheap_elt_at_uoffset (v, o1);
 
       uword f0_page_start, f0_page_end;
       uword o0_page_start, o0_page_end;
 
-      /* Free elt is mapped.  Addresses after that may not be mapped. */
-      f0_page_start = mheap_page_round (pointer_to_uword (f0_elt->user_data));
+      /* Free elt is mapped.  Addresses after that may not be mapped.
+         Address from f0_page_start to f0_page_end are not mapped. */
+      f0_page_start = mheap_page_round (pointer_to_uword (f0_elt + 1));
       f0_page_end   = mheap_page_truncate (pointer_to_uword (f1_elt));
 
       o0_page_start = mheap_page_truncate (pointer_to_uword (o0_elt));
-      o0_page_end = mheap_page_round (pointer_to_uword (o1_elt->user_data));
+      o0_page_end = mheap_page_round (pointer_to_uword (o1_elt + 1));
 
       if (o0_page_start < f0_page_start)
 	o0_page_start = f0_page_start;
