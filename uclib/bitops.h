@@ -86,7 +86,7 @@ do {									\
       _foreach_set_bit_f_##var = first_set (_foreach_set_bit_m_##var);	\
       _foreach_set_bit_m_##var ^= _foreach_set_bit_f_##var;		\
       (var) = min_log2 (_foreach_set_bit_f_##var);			\
-      do { body; } while (0);						\
+      body;								\
     }									\
 } while (0)
 
