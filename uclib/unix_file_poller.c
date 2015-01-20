@@ -191,8 +191,6 @@ typedef struct {
   u64 kevent_waits;
 } bsd_kqueue_main_t;
 
-static bsd_kqueue_main_t bsd_kqueue_main;
-
 typedef union {
   struct {
     u32 file_id, file_type;
@@ -203,9 +201,9 @@ typedef union {
 static void
 bsd_kqueue_update (unix_file_poller_t * fp, unix_file_poller_update_t * u)
 {
-  bsd_kqueue_main_t * km = &bsd_kqueue_main;
+  bsd_kqueue_main_t * km = fp->os_opaque;
   bsd_epoll_event_data_t ed;
-  struct kevent64 changes[2];
+  struct kevent64_s changes[2];
 
   ed.file_id = u->file_id;
   ed.file_type = u->file_type;
@@ -233,8 +231,8 @@ bsd_kqueue_update (unix_file_poller_t * fp, unix_file_poller_update_t * u)
 static uword
 bsd_kqueue_input (unix_file_poller_t * fp, f64 timeout_in_sec)
 {
-  bsd_kqueue_main_t * km = &bsd_kqueue_main;
-  struct kevent64 * e;
+  bsd_kqueue_main_t * km = fp->os_opaque;
+  struct kevent64_s * e;
   int n_fds_ready;
   struct timespec timeout;
 
@@ -246,6 +244,7 @@ bsd_kqueue_input (unix_file_poller_t * fp, f64 timeout_in_sec)
 			  /* n_changes */ 0,
 			  km->kevents,
 			  vec_len (km->kevents),
+                          /* flags */ 0,
 			  &timeout);
 
   if (n_fds_ready < 0)
@@ -262,9 +261,11 @@ bsd_kqueue_input (unix_file_poller_t * fp, f64 timeout_in_sec)
 
   for (e = km->kevents; e < km->kevents + n_fds_ready; e++)
     {
+      unix_file_poller_file_functions_t * ff;
       bsd_epoll_event_data_t ed;
       clib_error_t * errors[4];
       int n_errors = 0;
+        int i;
 
       ed.as_u64 = e->udata;
       ff = vec_elt (fp->file_functions_by_file_type, ed.file_type);
@@ -287,6 +288,15 @@ bsd_kqueue_input (unix_file_poller_t * fp, f64 timeout_in_sec)
   return n_fds_ready;
 }
 
+static void bsd_kqueue_free (unix_file_poller_t * fp)
+{
+  bsd_kqueue_main_t * km = fp->os_opaque;
+  close (km->kqueue_fd);
+  vec_free (km->kevents);
+  clib_mem_free (km);
+  fp->os_opaque = 0;
+}
+
 clib_error_t *
 unix_file_poller_init (unix_file_poller_t * fp)
 {
@@ -301,7 +311,8 @@ unix_file_poller_init (unix_file_poller_t * fp)
   if (km->kqueue_fd < 0)
     return clib_error_return_unix (0, "kqueue");
 
-  fp->file_update = bsd_kqueue_file_update;
+  fp->update = bsd_kqueue_update;
+  fp->free = bsd_kqueue_free;
   fp->poll_for_input = bsd_kqueue_input;
   fp->os_opaque = km;
 
