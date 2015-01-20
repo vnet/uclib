@@ -27,6 +27,8 @@
 typedef struct {
   clib_socket_t clib_socket;
 
+  unix_file_poller_file_t file_poller_file;
+
   /* Index in socket pool. */
   u32 index;
 
@@ -38,10 +40,6 @@ typedef struct {
 
   /* Used to timeout inactive connections which don't complete handshake. */
   f64 time_stamp_of_connection_creation;
-
-  u32 unix_file_poller_file_index;
-
-  uword opaque[2];
 
   union {
     struct {
@@ -58,10 +56,14 @@ typedef struct {
   };
 } websocket_socket_t;
 
+#define foreach_websocket_connection_type \
+  _ (server_listen) _(server_client) _ (client)
+
 typedef enum {
-  WEBSOCKET_CONNECTION_TYPE_SERVER_LISTEN,
-  WEBSOCKET_CONNECTION_TYPE_SERVER_CLIENT,
-  WEBSOCKET_CONNECTION_TYPE_CLIENT,
+#define _(f) WEBSOCKET_CONNECTION_TYPE_##f,
+  foreach_websocket_connection_type
+#undef _
+  WEBSOCKET_N_CONNECTION_TYPE,
 } websocket_connection_type_t;
 
 always_inline websocket_connection_type_t
@@ -69,10 +71,10 @@ websocket_connection_type (websocket_socket_t * ws)
 {
   clib_socket_t * s = &ws->clib_socket;
   return (s->is_server
-          ? WEBSOCKET_CONNECTION_TYPE_SERVER_LISTEN
+          ? WEBSOCKET_CONNECTION_TYPE_server_listen
           : (ws->is_server_client
-             ? WEBSOCKET_CONNECTION_TYPE_SERVER_CLIENT
-             : WEBSOCKET_CONNECTION_TYPE_CLIENT));
+             ? WEBSOCKET_CONNECTION_TYPE_server_client
+             : WEBSOCKET_CONNECTION_TYPE_client));
 }
 
 always_inline void
@@ -113,8 +115,14 @@ typedef enum {
 #define WEBSOCKET_DATA_FRAMING_PAYLOAD_IS_MASKED (1 << 7)
 
 typedef struct websocket_main_t {
-  /* Pool of connections. */
-  websocket_socket_t * socket_pool;
+  /* Pool of user web sockets. */
+  void * user_socket_pool;
+
+  /* sizeof (USER_socket_t) */
+  u32 user_socket_n_bytes;
+
+  /* STRUCT_OFFSET_OF (USER_socket_t, websocket); */
+  u32 user_socket_offset_of_websocket;
 
   /* Frames with payload larger than this size will cause connection to close. */
   u64 max_n_bytes_in_payload;
@@ -123,17 +131,19 @@ typedef struct websocket_main_t {
   (* rx_frame_payload) (struct websocket_main_t * wsm, websocket_socket_t * c, u8 * rx_payload, u32 n_payload_bytes);
 
   void (* new_client_for_server) (struct websocket_main_t * wsm,
-                                  u32 client_ws_index,
-                                  u32 server_ws_index);
+				  websocket_socket_t * client_ws,
+				  websocket_socket_t * server_ws);
 
-  void (* connection_will_close) (struct websocket_main_t * wsm, u32 ws_index, clib_error_t * reason);
+  void (* connection_will_close) (struct websocket_main_t * wsm, websocket_socket_t * ws, clib_error_t * reason);
 
-  clib_error_t * (* did_receive_handshake) (struct websocket_main_t * wsm, u32 ws_index);
+  clib_error_t * (* did_receive_handshake) (struct websocket_main_t * wsm, websocket_socket_t * ws);
 
   /* "Host:" field in handshake must match something in hash table. */
   uword * host_name_hash;
 
   unix_file_poller_t * unix_file_poller;
+
+  unix_file_poller_file_functions_t unix_file_poller_file_functions[WEBSOCKET_N_CONNECTION_TYPE];
 
   /* Random buffer for sec_websocket_key.  Seeded with /dev/urandom. */
   clib_random_buffer_t random_buffer;
@@ -145,15 +155,19 @@ typedef struct websocket_main_t {
 } websocket_main_t;
 
 clib_error_t * websocket_init (websocket_main_t * wsm);
-void websocket_close (websocket_main_t * wsm, u32 ws_index);
+void websocket_main_free (websocket_main_t * wsm);
+
+void websocket_close (websocket_main_t * wsm, websocket_socket_t * ws);
 void websocket_close_all_sockets_with_no_handshake (websocket_main_t * wsm);
 clib_error_t * websocket_socket_tx_binary_frame (websocket_socket_t * ws);
 clib_error_t * websocket_socket_tx_text_frame (websocket_socket_t * ws);
 
 void websocket_server_add_host (websocket_main_t * wsm, char * fmt, ...);
-clib_error_t * websocket_server_add_listener (websocket_main_t * wsm, char * config, u32 * ws_index);
+clib_error_t * websocket_server_add_listener (websocket_main_t * wsm, char * config, websocket_socket_t ** ws_result);
 
 clib_error_t *
-websocket_client_add_connection (websocket_main_t * wsm, u32 * ws_index, char * url_format, ...);
+websocket_client_add_connection (websocket_main_t * wsm, websocket_socket_t ** ws_result, char * url_format, ...);
+
+u8 * format_websocket_connection_type (u8 * s, va_list * va);
 
 #endif /* included_clib_websocket_h */

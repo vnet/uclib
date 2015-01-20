@@ -26,21 +26,20 @@
 #ifndef included_unix_file_poller_h
 #define included_unix_file_poller_h
 
-struct unix_file_poller_file;
-typedef clib_error_t * (unix_file_poller_file_function_t) (struct unix_file_poller_file * f);
+struct unix_file_poller_t;
+struct unix_file_poller_file_t;
+struct unix_file_poller_file_functions_t;
+
+typedef clib_error_t * (unix_file_poller_file_function_t) (struct unix_file_poller_file_functions_t * ff, u32 file_type, u32 file_id);
+
+/* Functions to be called when read/write data becomes ready. */
+typedef struct unix_file_poller_file_functions_t {
+  unix_file_poller_file_function_t * read_function, * write_function, * error_function;
+} unix_file_poller_file_functions_t;
 
 typedef struct unix_file_poller_file {
-  /* Unix file descriptor from open/socket. */
-  int file_descriptor;
-
   u32 flags;
-#define UNIX_FILE_POLLER_FILE_DATA_AVAILABLE_TO_WRITE (1 << 0)
-
-  /* Functions to be called when read/write data becomes ready. */
-  unix_file_poller_file_function_t * read_function, * write_function, * error_function;
-
-  /* Opaque data available for function's use. */
-  uword private_data[2];
+#define UNIX_FILE_POLLER_DATA_AVAILABLE_TO_WRITE (1 << 0)
 } unix_file_poller_file_t;
 
 typedef struct {
@@ -48,23 +47,32 @@ typedef struct {
   clib_error_t * error;
 } unix_error_history_t;
 
-typedef enum {
-  UNIX_FILE_POLLER_FILE_UPDATE_ADD,
-  UNIX_FILE_POLLER_FILE_UPDATE_MODIFY,
-  UNIX_FILE_POLLER_FILE_UPDATE_DELETE,
-} unix_file_poller_file_update_type_t;
+typedef struct {
+  enum {
+    UNIX_FILE_POLLER_UPDATE_ADD,
+    UNIX_FILE_POLLER_UPDATE_MODIFY,
+    UNIX_FILE_POLLER_UPDATE_DELETE,
+  } type;
+  int file_descriptor;
+  u32 file_type;
+  u32 file_id;
+  u32 is_write_ready;
+} unix_file_poller_update_t;
 
-typedef struct unix_file_poller {
-  /* Pool of files to poll for input/output. */
-  unix_file_poller_file_t * file_pool;
-
+typedef struct unix_file_poller_t {
   /* File descriptor update function (e.g. epoll for linux; kqueue for *BSD). */
-  void (* file_update) (struct unix_file_poller * poller,
-                        unix_file_poller_file_t * file,
-                        unix_file_poller_file_update_type_t update_type);
+  void (* update) (struct unix_file_poller_t * fp, unix_file_poller_update_t * update);
+
+  void (* free) (struct unix_file_poller_t * fp);
+
+  /* Linux/BSD dependencies are here. */
+  void * os_opaque;
 
   /* Poll file desciptors for input or output: returns number of files polled. */
-  uword (* poll_for_input) (struct unix_file_poller * poller, f64 timeout_in_sec);
+  uword (* poll_for_input) (struct unix_file_poller_t * fp, f64 timeout_in_sec);
+
+  /* Vector of read/write/error handler functions by file type. */
+  unix_file_poller_file_functions_t ** file_functions_by_file_type;
 
   /* Circular buffer of last unix errors. */
   unix_error_history_t error_history[128];
@@ -73,65 +81,47 @@ typedef struct unix_file_poller {
 } unix_file_poller_t;
 
 always_inline void
-unix_file_poller_free (unix_file_poller_t * um)
+unix_file_poller_free (unix_file_poller_t * fp)
 {
   uword i;
-  for (i = 0; i < ARRAY_LEN (um->error_history); i++)
-    if (um->error_history[i].error)
-      clib_error_free (um->error_history[i].error);
+  if (fp->free)
+    fp->free (fp);
+  for (i = 0; i < ARRAY_LEN (fp->error_history); i++)
+    if (fp->error_history[i].error)
+      clib_error_free (fp->error_history[i].error);
 }
 
 always_inline uword
-unix_file_poller_add_file (unix_file_poller_t * um, unix_file_poller_file_t * template)
+unix_file_poller_set_data_available_to_write (unix_file_poller_t * fp,
+					      unix_file_poller_file_t * f,
+					      unix_file_poller_update_t * u)
 {
-  unix_file_poller_file_t * f;
-  pool_get (um->file_pool, f);
-  f[0] = template[0];
-  um->file_update (um, f, UNIX_FILE_POLLER_FILE_UPDATE_ADD);
-  return f - um->file_pool;
-}
-
-always_inline void
-unix_file_poller_del_file (unix_file_poller_t * um, unix_file_poller_file_t * f)
-{
-  um->file_update (um, f, UNIX_FILE_POLLER_FILE_UPDATE_DELETE);
-  close (f->file_descriptor);
-  f->file_descriptor = ~0;
-  pool_put (um->file_pool, f);
-}
-
-always_inline unix_file_poller_file_t *
-unix_file_poller_get_file (unix_file_poller_t * um, u32 i)
-{ return pool_elt_at_index (um->file_pool, i); }
-
-always_inline uword
-unix_file_poller_set_data_available_to_write (unix_file_poller_t * um,
-                                              u32 unix_file_poller_file_index,
-                                              uword is_available)
-{
-  unix_file_poller_file_t * uf = pool_elt_at_index (um->file_pool, unix_file_poller_file_index);
-  uword was_available = (uf->flags & UNIX_FILE_POLLER_FILE_DATA_AVAILABLE_TO_WRITE);
+  uword is_available = u->is_write_ready;
+  uword was_available = (f->flags & UNIX_FILE_POLLER_DATA_AVAILABLE_TO_WRITE);
   if ((was_available != 0) != (is_available != 0))
     {
-      uf->flags ^= UNIX_FILE_POLLER_FILE_DATA_AVAILABLE_TO_WRITE;
-      um->file_update (um, uf, UNIX_FILE_POLLER_FILE_UPDATE_MODIFY);
+      f->flags ^= UNIX_FILE_POLLER_DATA_AVAILABLE_TO_WRITE;
+      u->type = UNIX_FILE_POLLER_UPDATE_MODIFY; /* just to make sure... */
+      fp->update (fp, u);
     }
   return was_available != 0;
 }
 
 always_inline void
-unix_save_error (unix_file_poller_t * um, clib_error_t * error)
+unix_save_error (unix_file_poller_t * fp, clib_error_t * error)
 {
-  unix_error_history_t * eh = um->error_history + um->error_history_index;
+  unix_error_history_t * eh = fp->error_history + fp->error_history_index;
   clib_error_free_vector (eh->error);
   eh->error = error;
   eh->time = unix_time_now ();
-  um->n_total_errors += 1;
-  if (++um->error_history_index >= ARRAY_LEN (um->error_history))
-    um->error_history_index = 0;
+  fp->n_total_errors += 1;
+  if (++fp->error_history_index >= ARRAY_LEN (fp->error_history))
+    fp->error_history_index = 0;
 }
 
 clib_error_t *
-unix_file_poller_init (unix_file_poller_t * um);
+unix_file_poller_init (unix_file_poller_t * fp);
+
+void unix_file_poller_add_file_type (unix_file_poller_t * fp, uword file_type, unix_file_poller_file_functions_t * ff);
 
 #endif /* included_unix_file_poller_file_poller_h */
