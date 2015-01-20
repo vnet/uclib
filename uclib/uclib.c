@@ -31,3 +31,8 @@
 #include <uclib/url.c>
 #include <uclib/websocket.c>
 #include <uclib/zvec.c>
+
+#ifdef CLIB_HAVE_ELF
+#include <uclib/elf.c>
+#include <uclib/elf_clib.c>
+#endif

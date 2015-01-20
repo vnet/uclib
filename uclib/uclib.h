@@ -224,4 +224,10 @@ always_inline uword max_pow2 (uword x)
 #include <uclib/unix_file_poller.h>
 #include <uclib/websocket.h>
 
+#if defined (__linux__)
+#define CLIB_HAVE_ELF
+#include <uclib/elf.h>
+#include <uclib/elf_clib.h>
+#endif
+
 #endif /* included_uclib_h */
