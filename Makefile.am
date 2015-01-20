@@ -2,7 +2,7 @@ AUTOMAKE_OPTIONS = foreign subdir-objects
 
 AM_CFLAGS = -Wall
 
-noinst_PROGRAMS = fheap sha socket websocket serialize
+noinst_PROGRAMS = fheap serialize sha socket websocket
 
 fheap_SOURCES = test/fheap.c
 sha_SOURCES = test/sha.c

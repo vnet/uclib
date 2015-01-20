@@ -78,8 +78,8 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-noinst_PROGRAMS = fheap$(EXEEXT) sha$(EXEEXT) socket$(EXEEXT) \
-	websocket$(EXEEXT) serialize$(EXEEXT)
+noinst_PROGRAMS = fheap$(EXEEXT) serialize$(EXEEXT) sha$(EXEEXT) \
+	socket$(EXEEXT) websocket$(EXEEXT)
 subdir = .
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/configure $(am__configure_deps) depcomp \
