@@ -27,8 +27,6 @@
 typedef struct {
   clib_socket_t clib_socket;
 
-  unix_file_poller_file_t file_poller_file;
-
   /* Index in socket pool. */
   u32 index;
 
@@ -37,6 +35,7 @@ typedef struct {
 
   u8 is_server_client : 1;
   u8 handshake_rx : 1;
+  u8 is_tx_data_available_to_write : 1;
 
   /* Used to timeout inactive connections which don't complete handshake. */
   f64 time_stamp_of_connection_creation;
@@ -144,6 +143,7 @@ typedef struct websocket_main_t {
   unix_file_poller_t * unix_file_poller;
 
   unix_file_poller_file_functions_t unix_file_poller_file_functions[WEBSOCKET_N_CONNECTION_TYPE];
+  u32 unix_file_poller_file_type[WEBSOCKET_N_CONNECTION_TYPE];
 
   /* Random buffer for sec_websocket_key.  Seeded with /dev/urandom. */
   clib_random_buffer_t random_buffer;

@@ -33,7 +33,7 @@ typedef enum {
 typedef struct {
   clib_socket_t clib_socket;
 
-  unix_file_poller_file_t file_poller_file;
+  u32 is_tx_data_available_to_write;
 
   test_socket_type_t type;
 
@@ -51,7 +51,7 @@ typedef struct {
 } test_socket_main_t;
 
 static clib_error_t *
-socket_file_error_ready (unix_file_poller_file_functions_t * ff, u32 socket_type, u32 socket_index)
+socket_file_error_ready (unix_file_poller_file_functions_t * ff, u32 socket_index)
 {
   clib_error_t * error = 0;
   ASSERT (0);
@@ -59,7 +59,7 @@ socket_file_error_ready (unix_file_poller_file_functions_t * ff, u32 socket_type
 }
 
 static clib_error_t *
-socket_server_file_read_ready (unix_file_poller_file_functions_t * ff, u32 socket_type, u32 socket_index)
+socket_server_file_read_ready (unix_file_poller_file_functions_t * ff, u32 socket_index)
 {
   test_socket_main_t * tsm = CONTAINER_OF (ff, test_socket_main_t, unix_file_poller_file_functions[TEST_SOCKET_TYPE_server]);
   test_socket_t * ts = pool_elt_at_index (tsm->socket_pool, socket_index);
@@ -99,7 +99,7 @@ socket_server_file_read_ready (unix_file_poller_file_functions_t * ff, u32 socke
 }
 
 static clib_error_t *
-socket_server_file_accept_on_read_ready (unix_file_poller_file_functions_t * ff, u32 socket_type, u32 socket_index)
+socket_server_file_accept_on_read_ready (unix_file_poller_file_functions_t * ff, u32 socket_index)
 {
   test_socket_main_t * tsm = CONTAINER_OF (ff, test_socket_main_t, unix_file_poller_file_functions[TEST_SOCKET_TYPE_server_listen]);
   test_socket_t * server_test_socket = pool_elt_at_index (tsm->socket_pool, socket_index);
@@ -140,7 +140,7 @@ socket_server_file_accept_on_read_ready (unix_file_poller_file_functions_t * ff,
 }
 
 static clib_error_t *
-socket_client_file_read_ready (unix_file_poller_file_functions_t * ff, u32 socket_type, u32 socket_index)
+socket_client_file_read_ready (unix_file_poller_file_functions_t * ff, u32 socket_index)
 {
   test_socket_main_t * tsm = CONTAINER_OF (ff, test_socket_main_t, unix_file_poller_file_functions[TEST_SOCKET_TYPE_client]);
   test_socket_t * ts = pool_elt_at_index (tsm->socket_pool, socket_index);
@@ -183,7 +183,7 @@ socket_client_file_read_ready (unix_file_poller_file_functions_t * ff, u32 socke
 }
 
 static clib_error_t *
-socket_client_file_write_ready (unix_file_poller_file_functions_t * ff, u32 socket_type, u32 socket_index)
+socket_client_file_write_ready (unix_file_poller_file_functions_t * ff, u32 socket_index)
 {
   test_socket_main_t * tsm = CONTAINER_OF (ff, test_socket_main_t, unix_file_poller_file_functions[TEST_SOCKET_TYPE_client]);
   test_socket_t * ts = pool_elt_at_index (tsm->socket_pool, socket_index);
@@ -233,9 +233,11 @@ socket_client_file_write_ready (unix_file_poller_file_functions_t * ff, u32 sock
       .is_write_ready = clib_socket_tx_data_is_available_to_write (s),
     };
 
-    unix_file_poller_set_data_available_to_write (&tsm->unix_file_poller,
-						  &ts->file_poller_file,
-						  &u);
+    if (ts->is_tx_data_available_to_write != u.is_write_ready)
+      {
+	ts->is_tx_data_available_to_write ^= 1;
+	tsm->unix_file_poller.update (&tsm->unix_file_poller, &u);
+      }
   }
 
   return error;
@@ -243,8 +245,8 @@ socket_client_file_write_ready (unix_file_poller_file_functions_t * ff, u32 sock
 
 static void add_file_type (test_socket_main_t * tsm, test_socket_type_t t, unix_file_poller_file_functions_t f)
 {
+  unix_file_poller_add_file_type (&tsm->unix_file_poller, &tsm->unix_file_poller_file_functions[t]);
   tsm->unix_file_poller_file_functions[t] = f;
-  unix_file_poller_add_file_type (&tsm->unix_file_poller, t, &tsm->unix_file_poller_file_functions[t]);
 }
 
 int test_socket_main (unformat_input_t * input)

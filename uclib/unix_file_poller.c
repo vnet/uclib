@@ -23,13 +23,7 @@
  *  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <uclib/unix_file_poller.h>
-
-void unix_file_poller_add_file_type (unix_file_poller_t * fp, uword file_type, unix_file_poller_file_functions_t * ff)
-{
-  vec_validate (fp->file_functions_by_file_type, file_type);
-  fp->file_functions_by_file_type[file_type] = ff;
-}
+#include <uclib/uclib.h>
 
 #ifdef __linux__
 
@@ -123,19 +117,19 @@ linux_epoll_input (unix_file_poller_t * um, f64 timeout_in_sec)
 	{
 	  if (e->events & EPOLLOUT)
 	    {
-	      errors[n_errors] = ff->write_function (ff, ed.file_type, ed.file_id);
+	      errors[n_errors] = ff->write_function (ff, ed.file_id);
 	      n_errors += errors[n_errors] != 0;
 	    }
 	  if (e->events & EPOLLIN)
 	    {
-	      errors[n_errors] = ff->read_function (ff, ed.file_type, ed.file_id);
+	      errors[n_errors] = ff->read_function (ff, ed.file_id);
 	      n_errors += errors[n_errors] != 0;
 	      n_input_events += 1;
 	    }
 	}
       else
 	{
-	  errors[n_errors] = ff->error_function (ff, ed.file_type, ed.file_id);
+	  errors[n_errors] = ff->error_function (ff, ed.file_id);
 	  n_errors += errors[n_errors] != 0;
 	}
 

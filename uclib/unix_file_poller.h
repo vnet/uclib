@@ -27,20 +27,14 @@
 #define included_unix_file_poller_h
 
 struct unix_file_poller_t;
-struct unix_file_poller_file_t;
 struct unix_file_poller_file_functions_t;
 
-typedef clib_error_t * (unix_file_poller_file_function_t) (struct unix_file_poller_file_functions_t * ff, u32 file_type, u32 file_id);
+typedef clib_error_t * (unix_file_poller_file_function_t) (struct unix_file_poller_file_functions_t * ff, u32 file_id);
 
 /* Functions to be called when read/write data becomes ready. */
 typedef struct unix_file_poller_file_functions_t {
   unix_file_poller_file_function_t * read_function, * write_function, * error_function;
 } unix_file_poller_file_functions_t;
-
-typedef struct unix_file_poller_file {
-  u32 flags;
-#define UNIX_FILE_POLLER_DATA_AVAILABLE_TO_WRITE (1 << 0)
-} unix_file_poller_file_t;
 
 typedef struct {
   f64 time;
@@ -91,22 +85,6 @@ unix_file_poller_free (unix_file_poller_t * fp)
       clib_error_free (fp->error_history[i].error);
 }
 
-always_inline uword
-unix_file_poller_set_data_available_to_write (unix_file_poller_t * fp,
-					      unix_file_poller_file_t * f,
-					      unix_file_poller_update_t * u)
-{
-  uword is_available = u->is_write_ready;
-  uword was_available = (f->flags & UNIX_FILE_POLLER_DATA_AVAILABLE_TO_WRITE);
-  if ((was_available != 0) != (is_available != 0))
-    {
-      f->flags ^= UNIX_FILE_POLLER_DATA_AVAILABLE_TO_WRITE;
-      u->type = UNIX_FILE_POLLER_UPDATE_MODIFY; /* just to make sure... */
-      fp->update (fp, u);
-    }
-  return was_available != 0;
-}
-
 always_inline void
 unix_save_error (unix_file_poller_t * fp, clib_error_t * error)
 {
@@ -119,9 +97,14 @@ unix_save_error (unix_file_poller_t * fp, clib_error_t * error)
     fp->error_history_index = 0;
 }
 
+always_inline uword unix_file_poller_add_file_type (unix_file_poller_t * fp, unix_file_poller_file_functions_t * ff)
+{
+  uword t = vec_len (fp->file_functions_by_file_type);
+  vec_add1 (fp->file_functions_by_file_type, ff);
+  return t;
+}
+
 clib_error_t *
 unix_file_poller_init (unix_file_poller_t * fp);
-
-void unix_file_poller_add_file_type (unix_file_poller_t * fp, uword file_type, unix_file_poller_file_functions_t * ff);
 
 #endif /* included_unix_file_poller_file_poller_h */
