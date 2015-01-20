@@ -70,6 +70,7 @@ _ (format_timeval);
 _ (format_time_float);
 _ (format_clib_mem_usage);
 _ (format_sockaddr);
+_ (format_symbol_with_address);
 
 #undef _
 

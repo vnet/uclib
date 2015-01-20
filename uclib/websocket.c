@@ -24,42 +24,73 @@
 #include <uclib/uclib.h>
 
 always_inline websocket_socket_t *
+websocket_at_index (websocket_main_t * wsm, u32 i)
+{
+  ASSERT (! pool_is_free_index (wsm->user_socket_pool, i));
+  return wsm->user_socket_pool + i*wsm->user_socket_n_bytes + wsm->user_socket_offset_of_websocket;
+}
+
+always_inline websocket_socket_t *
 websocket_socket_alloc (websocket_main_t * wsm)
 {
+  void * s;
   websocket_socket_t * ws;
-  pool_get (wsm->socket_pool, ws);
-  memset (ws, 0, sizeof (ws[0]));
-  ws->index = ws - wsm->socket_pool;
+  uword i;
+  wsm->user_socket_pool = pool_get_free_index (wsm->user_socket_pool, wsm->user_socket_n_bytes, &i);
+  s = wsm->user_socket_pool + i * wsm->user_socket_n_bytes;
+  memset (s, 0, wsm->user_socket_n_bytes);
+  ws = s + wsm->user_socket_offset_of_websocket;
+  ws->index = i;
   return ws;
+}
+
+always_inline void
+websocket_socket_dealloc (websocket_main_t * wsm, websocket_socket_t * ws)
+{
+  uword saved_index = ws->index;
+  close (ws->clib_socket.fd);
+  websocket_socket_free (ws);
+  pool_put_index (wsm->user_socket_pool, saved_index);
+}
+
+always_inline uword
+websocket_unix_file_poller_file_type (websocket_main_t * wsm, websocket_socket_t * ws)
+{
+  websocket_connection_type_t t = websocket_connection_type (ws);
+  return wsm->unix_file_poller_file_type[t];
 }
 
 static clib_error_t *
 websocket_main_close_socket (websocket_main_t * wsm, websocket_socket_t * ws, clib_error_t * error)
 {
   clib_socket_t * s = &ws->clib_socket;
-  unix_file_poller_file_t * f;
 
   if (wsm->connection_will_close)
-    wsm->connection_will_close (wsm, ws->index, error);
+    wsm->connection_will_close (wsm, ws, error);
 
   if (wsm->verbose)
     clib_warning ("close connection %U -> %U",
                   format_sockaddr, &s->self_addr,
                   format_sockaddr, &s->peer_addr);
 
-  f = unix_file_poller_get_file (wsm->unix_file_poller, ws->unix_file_poller_file_index);
-  unix_file_poller_del_file (wsm->unix_file_poller, f);
-  websocket_socket_free (ws);
-  pool_put (wsm->socket_pool, ws);
+  {
+    unix_file_poller_update_t u = {
+      .type = UNIX_FILE_POLLER_UPDATE_DELETE,
+      .file_descriptor = s->fd,
+      .file_id = ws->index,
+      .file_type = websocket_unix_file_poller_file_type (wsm, ws),
+      .is_write_ready = 0,
+    };
+    wsm->unix_file_poller->update (wsm->unix_file_poller, &u);
+  }
+
+  websocket_socket_dealloc (wsm, ws);
 
   return error;
 }
 
-void websocket_close (websocket_main_t * wsm, u32 ws_index)
-{
-  websocket_socket_t * ws = pool_elt_at_index (wsm->socket_pool, ws_index);
-  websocket_main_close_socket (wsm, ws, /* no error */ 0);
-}
+void websocket_close (websocket_main_t * wsm, websocket_socket_t * ws)
+{ websocket_main_close_socket (wsm, ws, /* no error */ 0); }
 
 static clib_error_t *
 websocket_rx_handshake_timeout (websocket_main_t * wsm, websocket_socket_t * ws)
@@ -170,11 +201,12 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
       rx = rx_frame_start + n_bytes_in_frame_header + n_bytes_of_payload;
     }
 
+ done:
   /* Remove header and payload from receive buffer. */
-  vec_delete (s->rx_buffer, rx - s->rx_buffer, 0);
+  if (n_left_in_rx_buffer < vec_len (s->rx_buffer))
+    vec_delete (s->rx_buffer, vec_len (s->rx_buffer) - n_left_in_rx_buffer, 0);
   rx_frame_parsed = error == 0;
 
- done:
   if (error)
     {
       websocket_main_close_socket (wsm, ws, error);
@@ -316,15 +348,37 @@ parse_tx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
 }
 
 static clib_error_t *
-websocket_file_error_ready (unix_file_poller_file_t * f)
+websocket_server_file_read_ready (unix_file_poller_file_functions_t * ff, u32 websocket_index);
+static clib_error_t *
+websocket_server_file_accept_on_read_ready (unix_file_poller_file_functions_t * ff, u32 websocket_index);
+static clib_error_t *
+websocket_client_file_read_ready (unix_file_poller_file_functions_t * ff, u32 websocket_index);
+
+static websocket_connection_type_t
+websocket_connection_type_from_file_functions (unix_file_poller_file_functions_t * ff)
 {
-  websocket_main_t * wsm = uword_to_pointer (f->private_data[0], websocket_main_t *);
-  websocket_socket_t * ws = pool_elt_at_index (wsm->socket_pool, f->private_data[1]);
+  if (ff->read_function == websocket_client_file_read_ready)
+    return WEBSOCKET_CONNECTION_TYPE_client;
+  if (ff->read_function == websocket_server_file_read_ready)
+    return WEBSOCKET_CONNECTION_TYPE_server_client;
+  if (ff->read_function == websocket_server_file_accept_on_read_ready)
+    return WEBSOCKET_CONNECTION_TYPE_server_listen;
+  ASSERT (0);
+  return ~0;
+}
+
+static clib_error_t *
+websocket_file_error_ready (unix_file_poller_file_functions_t * ff, u32 websocket_index)
+{
+  websocket_main_t * wsm = CONTAINER_OF (ff, websocket_main_t,
+					 unix_file_poller_file_functions[websocket_connection_type_from_file_functions (ff)]);
+  websocket_socket_t * ws = websocket_at_index (wsm, websocket_index);
+  clib_socket_t * s = &ws->clib_socket;
   clib_error_t * error = 0;
   int error_errno = 0;
   socklen_t error_errno_len = sizeof (error_errno);
 
-  if (getsockopt (f->file_descriptor, SOL_SOCKET, SO_ERROR, (void *) &error_errno, &error_errno_len) < 0)
+  if (getsockopt (s->fd, SOL_SOCKET, SO_ERROR, (void *) &error_errno, &error_errno_len) < 0)
     error = clib_error_return_unix (0, "getsockopt SO_ERROR");
   else
     error = clib_error_return (0, "error %s", strerror (error_errno));
@@ -336,10 +390,10 @@ websocket_file_error_ready (unix_file_poller_file_t * f)
 }
 
 static clib_error_t *
-websocket_server_file_read_ready (unix_file_poller_file_t * f)
+websocket_server_file_read_ready (unix_file_poller_file_functions_t * ff, u32 websocket_index)
 {
-  websocket_main_t * wsm = uword_to_pointer (f->private_data[0], websocket_main_t *);
-  websocket_socket_t * ws = pool_elt_at_index (wsm->socket_pool, f->private_data[1]);
+  websocket_main_t * wsm = CONTAINER_OF (ff, websocket_main_t, unix_file_poller_file_functions[WEBSOCKET_CONNECTION_TYPE_server_client]);
+  websocket_socket_t * ws = websocket_at_index (wsm, websocket_index);
   clib_socket_t * s = &ws->clib_socket;
   clib_error_t * error = clib_socket_rx (s, 4096);
 
@@ -368,7 +422,7 @@ websocket_server_file_read_ready (unix_file_poller_file_t * f)
 
       if (wsm->did_receive_handshake)
         {
-          error = wsm->did_receive_handshake (wsm, ws->index);
+          error = wsm->did_receive_handshake (wsm, ws);
           if (error)
             return websocket_main_close_socket (wsm, ws, error);
         }
@@ -383,38 +437,41 @@ websocket_server_file_read_ready (unix_file_poller_file_t * f)
 }
 
 static clib_error_t *
-websocket_server_file_accept_on_read_ready (unix_file_poller_file_t * f)
+websocket_server_file_accept_on_read_ready (unix_file_poller_file_functions_t * ff, u32 websocket_index)
 {
-  websocket_main_t * wsm = uword_to_pointer (f->private_data[0], websocket_main_t *);
-  websocket_socket_t * server_ws = pool_elt_at_index (wsm->socket_pool, f->private_data[1]);
-  websocket_socket_t * client_ws;
-  clib_socket_t * server_socket = &server_ws->clib_socket;
-  clib_socket_t * client_socket;
-  unix_file_poller_file_t client_file;
+  websocket_main_t * wsm = CONTAINER_OF (ff, websocket_main_t, unix_file_poller_file_functions[WEBSOCKET_CONNECTION_TYPE_server_listen]);
+  websocket_socket_t * server_ws, * client_ws;
+  clib_socket_t * server_socket, * client_socket;
   clib_error_t * error = 0;
 
   client_ws = websocket_socket_alloc (wsm);
   client_ws->is_server_client = 1;
+  server_ws = websocket_at_index (wsm, websocket_index);
+
   client_socket = &client_ws->clib_socket;
+  server_socket = &server_ws->clib_socket;
+
+  ASSERT (websocket_connection_type (server_ws) == WEBSOCKET_CONNECTION_TYPE_server_listen);
 
   error = clib_socket_accept (server_socket, client_socket);
   if (error)
     goto done;
 
-  memset (&client_file, 0, sizeof (client_file));
-  client_file.private_data[0] = pointer_to_uword (wsm);
-  client_file.private_data[1] = client_ws->index;
-  client_file.file_descriptor = client_socket->fd;
-  client_file.read_function = websocket_server_file_read_ready;
-  client_file.error_function = websocket_file_error_ready;
-
-  client_ws->unix_file_poller_file_index = unix_file_poller_add_file (wsm->unix_file_poller, &client_file);
-
-  memcpy (&client_ws->opaque, server_ws->opaque, sizeof (server_ws->opaque));
+  {
+    unix_file_poller_update_t u = {
+      .type = UNIX_FILE_POLLER_UPDATE_ADD,
+      .file_descriptor = client_socket->fd,
+      .file_id = client_ws->index,
+      .file_type = wsm->unix_file_poller_file_type[WEBSOCKET_CONNECTION_TYPE_server_client],
+      .is_write_ready = 0,
+    };
+    wsm->unix_file_poller->update (wsm->unix_file_poller, &u);
+  }
 
   client_ws->time_stamp_of_connection_creation = unix_time_now ();
 
-  wsm->new_client_for_server (wsm, client_ws->index, server_ws->index);
+  if (wsm->new_client_for_server)
+    wsm->new_client_for_server (wsm, client_ws, server_ws);
 
   if (wsm->verbose)
     clib_warning ("new connection index %d %U",
@@ -423,18 +480,15 @@ websocket_server_file_accept_on_read_ready (unix_file_poller_file_t * f)
 
  done:
   if (error)
-    {
-      websocket_socket_free (client_ws);
-      pool_put (wsm->socket_pool, client_ws);
-    }
+    websocket_socket_dealloc (wsm, client_ws);
   return error;
 }
 
 static clib_error_t *
-websocket_client_file_read_ready (unix_file_poller_file_t * f)
+websocket_client_file_read_ready (unix_file_poller_file_functions_t * ff, u32 websocket_index)
 {
-  websocket_main_t * wsm = uword_to_pointer (f->private_data[0], websocket_main_t *);
-  websocket_socket_t * ws = pool_elt_at_index (wsm->socket_pool, f->private_data[1]);
+  websocket_main_t * wsm = CONTAINER_OF (ff, websocket_main_t, unix_file_poller_file_functions[WEBSOCKET_CONNECTION_TYPE_client]);
+  websocket_socket_t * ws = websocket_at_index (wsm, websocket_index);
   clib_socket_t * s = &ws->clib_socket;
   clib_error_t * error;
 
@@ -468,11 +522,46 @@ websocket_client_file_read_ready (unix_file_poller_file_t * f)
   return error;
 }
 
-static clib_error_t *
-websocket_client_file_write_ready (unix_file_poller_file_t * f)
+static void websocket_socket_update_write_data_available (websocket_main_t * wsm, websocket_socket_t * ws)
 {
-  websocket_main_t * wsm = uword_to_pointer (f->private_data[0], websocket_main_t *);
-  websocket_socket_t * ws = pool_elt_at_index (wsm->socket_pool, f->private_data[1]);
+  clib_socket_t * s = &ws->clib_socket;
+  unix_file_poller_update_t u = {
+    .type = UNIX_FILE_POLLER_UPDATE_MODIFY,
+    .file_descriptor = s->fd,
+    .file_id = ws->index,
+    .file_type = websocket_unix_file_poller_file_type (wsm, ws),
+    .is_write_ready = clib_socket_tx_data_is_available_to_write (s),
+  };
+
+  if (ws->is_tx_data_available_to_write != u.is_write_ready)
+    {
+      ws->is_tx_data_available_to_write ^= 1;
+      wsm->unix_file_poller->update (wsm->unix_file_poller, &u);
+    }
+}
+
+static clib_error_t *
+websocket_server_file_write_ready (unix_file_poller_file_functions_t * ff, u32 websocket_index)
+{
+  websocket_main_t * wsm = CONTAINER_OF (ff, websocket_main_t, unix_file_poller_file_functions[WEBSOCKET_CONNECTION_TYPE_server_client]);
+  websocket_socket_t * ws = websocket_at_index (wsm, websocket_index);
+  clib_socket_t * s = &ws->clib_socket;
+  clib_error_t * error = 0;
+
+  error = clib_socket_tx (s);
+  if (error && unix_error_is_fatal (errno))
+    return error;
+
+  websocket_socket_update_write_data_available (wsm, ws);
+
+  return error;
+}
+
+static clib_error_t *
+websocket_client_file_write_ready (unix_file_poller_file_functions_t * ff, u32 websocket_index)
+{
+  websocket_main_t * wsm = CONTAINER_OF (ff, websocket_main_t, unix_file_poller_file_functions[WEBSOCKET_CONNECTION_TYPE_client]);
+  websocket_socket_t * ws = websocket_at_index (wsm, websocket_index);
   clib_socket_t * s = &ws->clib_socket;
   clib_error_t * error = 0;
 
@@ -514,17 +603,25 @@ websocket_client_file_write_ready (unix_file_poller_file_t * f)
   if (error && unix_error_is_fatal (errno))
     return error;
 
-  unix_file_poller_set_data_available_to_write (wsm->unix_file_poller,
-                                                f - wsm->unix_file_poller->file_pool,
-                                                clib_socket_tx_data_is_available_to_write (s));
+  websocket_socket_update_write_data_available (wsm, ws);
 
   return error;
+}
+
+static void add_file_type (websocket_main_t * wsm, websocket_connection_type_t t, unix_file_poller_file_functions_t f)
+{
+  wsm->unix_file_poller_file_functions[t] = f;
+  wsm->unix_file_poller_file_type[t]
+    = unix_file_poller_add_file_type (wsm->unix_file_poller, &wsm->unix_file_poller_file_functions[t]);
 }
 
 clib_error_t *
 websocket_init (websocket_main_t * wsm)
 {
   clib_error_t * error = 0;
+
+  ASSERT (wsm->user_socket_n_bytes >= sizeof (websocket_socket_t));
+  ASSERT (wsm->user_socket_offset_of_websocket + sizeof (websocket_socket_t) <= wsm->user_socket_n_bytes);
 
   error = unix_file_poller_init (wsm->unix_file_poller);
   if (error)
@@ -546,6 +643,33 @@ websocket_init (websocket_main_t * wsm)
   if (wsm->rx_handshake_timeout_in_sec <= 0)
     wsm->rx_handshake_timeout_in_sec = 5;
 
+  {
+    unix_file_poller_file_functions_t f = {
+      .read_function = websocket_client_file_read_ready,
+      .write_function = websocket_client_file_write_ready,
+      .error_function = websocket_file_error_ready,
+    };
+    add_file_type (wsm, WEBSOCKET_CONNECTION_TYPE_client, f);
+  }
+
+  {
+    unix_file_poller_file_functions_t f = {
+      .read_function = websocket_server_file_read_ready,
+      .write_function = websocket_server_file_write_ready,
+      .error_function = websocket_file_error_ready,
+    };
+    add_file_type (wsm, WEBSOCKET_CONNECTION_TYPE_server_client, f);
+  }
+
+  {
+    unix_file_poller_file_functions_t f = {
+      .read_function = websocket_server_file_accept_on_read_ready,
+      .write_function = 0,
+      .error_function = websocket_file_error_ready,
+    };
+    add_file_type (wsm, WEBSOCKET_CONNECTION_TYPE_server_listen, f);
+  }
+
  done:
   return error;
 }
@@ -556,21 +680,20 @@ void websocket_close_all_sockets_with_no_handshake (websocket_main_t * wsm)
   websocket_socket_t * ws;
   f64 time_now = unix_time_now ();
   uword * close_bitmap = 0;
+  uword i;
 
-  pool_foreach (ws, wsm->socket_pool, ({
-    if (! ws->is_server_client)
-      continue;
-    if (! ws->handshake_rx
+  pool_foreach_index (i, wsm->user_socket_pool, ({
+    ws = websocket_at_index (wsm, i);
+    if (ws->is_server_client
+	&& ! ws->handshake_rx
         && time_now - ws->time_stamp_of_connection_creation > wsm->rx_handshake_timeout_in_sec)
       close_bitmap = clib_bitmap_ori (close_bitmap, ws->index);
   }));
 
   {
-    uword ws_index;
     clib_error_t * error;
-
-    clib_bitmap_foreach (ws_index, close_bitmap, ({
-      ws = pool_elt_at_index (wsm->socket_pool, ws_index);
+    clib_bitmap_foreach (i, close_bitmap, ({
+      ws = websocket_at_index (wsm, i);
       error = websocket_rx_handshake_timeout (wsm, ws);
       unix_save_error (wsm->unix_file_poller, error);
     }));
@@ -634,12 +757,11 @@ void websocket_server_add_host (websocket_main_t * wsm, char * fmt, ...)
 }
 
 clib_error_t *
-websocket_server_add_listener (websocket_main_t * wsm, char * config, u32 * ws_index)
+websocket_server_add_listener (websocket_main_t * wsm, char * config, websocket_socket_t ** ws_result)
 {
   clib_error_t * error = 0;
   websocket_socket_t * ws;
   clib_socket_t * s;
-  unix_file_poller_file_t pf;
 
   ws = websocket_socket_alloc (wsm);
 
@@ -654,33 +776,32 @@ websocket_server_add_listener (websocket_main_t * wsm, char * config, u32 * ws_i
   if (wsm->verbose)
     clib_warning ("listening %U", format_sockaddr, &s->self_addr);
 
-  memset (&pf, 0, sizeof (pf));
-  pf.file_descriptor = s->fd;
-  pf.private_data[0] = pointer_to_uword (wsm);
-  pf.private_data[1] = ws->index;
-  pf.read_function = websocket_server_file_accept_on_read_ready;
-  pf.error_function = websocket_file_error_ready;
-  ws->unix_file_poller_file_index = unix_file_poller_add_file (wsm->unix_file_poller, &pf);
+  {
+    unix_file_poller_update_t u = {
+      .type = UNIX_FILE_POLLER_UPDATE_ADD,
+      .file_descriptor = s->fd,
+      .file_id = ws->index,
+      .file_type = websocket_unix_file_poller_file_type (wsm, ws),
+      .is_write_ready = 0,
+    };
+    wsm->unix_file_poller->update (wsm->unix_file_poller, &u);
+  }
 
  done:
   if (error)
-    {
-      websocket_socket_free (ws);
-      pool_put (wsm->socket_pool, ws);
-    }
+    websocket_socket_dealloc (wsm, ws);
   else
-    *ws_index = ws->index;
+    *ws_result = ws;
 
   return error;
 }
 
 clib_error_t *
-websocket_client_add_connection (websocket_main_t * wsm, u32 * ws_index, char * url_format, ...)
+websocket_client_add_connection (websocket_main_t * wsm, websocket_socket_t ** ws_result, char * url_format, ...)
 {
   va_list va;
   websocket_socket_t * ws;
   clib_socket_t * s;
-  unix_file_poller_file_t pf;
   clib_error_t * error = 0;
   u8 * url = 0;
 
@@ -697,31 +818,59 @@ websocket_client_add_connection (websocket_main_t * wsm, u32 * ws_index, char * 
   s = &ws->clib_socket;
   s->is_client = 1;
   s->non_blocking_connect = 1;
+  s->tcp_delay = 0;
   s->config = url_socket_config (&ws->client.url);
   error = clib_socket_init (s);
   if (error)
     goto done;
         
-  memset (&pf, 0, sizeof (pf));
-  pf.read_function = websocket_client_file_read_ready;
-  pf.write_function = websocket_client_file_write_ready;
-  pf.error_function = websocket_file_error_ready;
-  if (s->non_blocking_connect)
-    pf.flags = UNIX_FILE_POLLER_FILE_DATA_AVAILABLE_TO_WRITE;
-  pf.file_descriptor = s->fd;
-  pf.private_data[0] = pointer_to_uword (wsm);
-  pf.private_data[1] = ws->index;
-  ws->unix_file_poller_file_index = unix_file_poller_add_file (wsm->unix_file_poller, &pf);
+  {
+    unix_file_poller_update_t u = {
+      .type = UNIX_FILE_POLLER_UPDATE_ADD,
+      .file_descriptor = s->fd,
+      .file_id = ws->index,
+      .file_type = websocket_unix_file_poller_file_type (wsm, ws),
+      .is_write_ready = 1,
+    };
+    wsm->unix_file_poller->update (wsm->unix_file_poller, &u);
+  }
 
 done:
   if (error)
-    {
-      websocket_socket_free (ws);
-      pool_put (wsm->socket_pool, ws);
-    }
+    websocket_socket_dealloc (wsm, ws);
   else
-    *ws_index = ws->index;
+    *ws_result = ws;
   vec_free (url);
 
   return error;
+}
+
+void websocket_main_free (websocket_main_t * wsm)
+{
+  uword i;
+  vec_foreach_index (i, wsm->user_socket_pool)
+    {
+      if (! pool_is_free_index (wsm->user_socket_pool, i))
+	{
+	  websocket_socket_t * ws = websocket_at_index (wsm, i);
+	  websocket_socket_dealloc (wsm, ws);
+	}
+    }
+  pool_free (wsm->user_socket_pool);
+  clib_random_buffer_free (&wsm->random_buffer);
+}
+
+u8 * format_websocket_connection_type (u8 * s, va_list * va)
+{
+  websocket_connection_type_t x = va_arg (*va, u32);
+  char * t = 0;
+  switch (x)
+    {
+#define _(f) case WEBSOCKET_CONNECTION_TYPE_##f: t = #f; break;
+      foreach_websocket_connection_type
+#undef _
+    default:
+      return format (s, "unknown 0x%x", x);
+    }
+  return format (s, "%U", format_c_identifier, t);
 }

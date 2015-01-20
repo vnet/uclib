@@ -97,8 +97,9 @@ clib_socket_free (clib_socket_t *s)
   clib_fifo_free (s->tx_buffer_fifo);
   vec_free (s->tx_buffer_iovecs);
   clib_socket_buffer_free (s->current_tx_buffer);
+  vec_free (s->tx_add_formatted_buffer);
   vec_free (s->rx_buffer);
-  if (clib_mem_is_heap_object (s->config))
+  if (clib_mem_is_heap_object (vec_header (s->config, 0)))
     vec_free (s->config);
   memset (s, 0, sizeof (s[0]));
 }

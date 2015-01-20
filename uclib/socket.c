@@ -388,7 +388,8 @@ clib_error_t * clib_socket_accept (clib_socket_t * server, clib_socket_t * clien
   memset (client, 0, sizeof (client[0]));
 
   /* Accept the new socket connection. */
-  client->fd = accept (server->fd, 0, 0);
+  len = sizeof (client->peer_addr.in);
+  client->fd = accept (server->fd, (struct sockaddr *) &client->peer_addr.in, &len);
   if (client->fd < 0) 
     return clib_error_return_unix (0, "accept");
   
@@ -399,14 +400,6 @@ clib_error_t * clib_socket_accept (clib_socket_t * server, clib_socket_t * clien
       goto close_client;
     }
     
-  /* Get peer info. */
-  len = sizeof (client->peer_addr.in);
-  if (getpeername (client->fd, (struct sockaddr *) &client->peer_addr.in, &len) < 0)
-    {
-      error = clib_error_return_unix (0, "getpeername");
-      goto close_client;
-    }
-
   client->self_addr = server->self_addr;
   client->is_client = 1;
   return 0;

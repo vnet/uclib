@@ -1191,11 +1191,7 @@ u8 * format_mheap (u8 * s, va_list * va)
 	  {
 	    if (i > 0)
 	      s = format (s, "%U", format_white_space, indent);
-#ifdef CLIB_UNIX
-	    s = format (s, " %U\n", format_clib_elf_symbol_with_address, t->callers[i]);
-#else
-	    s = format (s, " %p\n", t->callers[i]);
-#endif
+	    s = format (s, " %U\n", format_symbol_with_address, t->callers[i]);
 	  }
       }
 

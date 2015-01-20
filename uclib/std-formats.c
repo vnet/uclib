@@ -373,3 +373,14 @@ u8 * format_sockaddr (u8 * s, va_list * args)
 
   return s;
 }
+
+u8 * format_symbol_with_address (u8 * s, va_list * va)
+{
+  void * addr = va_arg (*va, void *);
+#ifdef CLIB_HAVE_ELF
+  s = format (s, "%U", format_clib_elf_symbol_with_address, addr);
+#else
+  s = format (s, "%p", addr);
+#endif
+  return s;
+}
