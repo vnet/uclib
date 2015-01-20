@@ -74,9 +74,9 @@ linux_epoll_update (unix_file_poller_t * fp, unix_file_poller_update_t * u)
 }
 
 static uword
-linux_epoll_input (unix_file_poller_t * um, f64 timeout_in_sec)
+linux_epoll_input (unix_file_poller_t * fp, f64 timeout_in_sec)
 {
-  linux_epoll_main_t * em = um->os_opaque;
+  linux_epoll_main_t * em = fp->os_opaque;
   struct epoll_event * e;
   int n_fds_ready;
   uword n_input_events = 0;
@@ -111,7 +111,7 @@ linux_epoll_input (unix_file_poller_t * um, f64 timeout_in_sec)
       unix_file_poller_file_functions_t * ff;
 
       ed.as_u64 = e->data.u64;
-      ff = vec_elt (um->file_functions_by_file_type, ed.file_type);
+      ff = vec_elt (fp->file_functions_by_file_type, ed.file_type);
 
       if (PREDICT_TRUE (! (e->events & EPOLLERR)))
 	{
@@ -137,7 +137,7 @@ linux_epoll_input (unix_file_poller_t * um, f64 timeout_in_sec)
 	uword i;
 	ASSERT (n_errors < ARRAY_LEN (errors));
 	for (i = 0; i < n_errors; i++)
-	  unix_save_error (um, errors[i]);
+	  unix_save_error (fp, errors[i]);
       }
     }
 
@@ -184,7 +184,7 @@ unix_file_poller_init (unix_file_poller_t * fp)
 
 typedef struct {
   int kqueue_fd;
-  struct kevent * kevents;
+  struct kevent64_s * kevents;
 
   /* Statistics. */
   u64 kevents_ready;
@@ -193,49 +193,60 @@ typedef struct {
 
 static bsd_kqueue_main_t bsd_kqueue_main;
 
+typedef union {
+  struct {
+    u32 file_id, file_type;
+  };
+  u64 as_u64;
+} bsd_epoll_event_data_t;
+
 static void
-bsd_kqueue_file_update (unix_file_poller_t * um,
-                        unix_file_poller_file_t * f,
-                        unix_file_poller_file_update_type_t update_type)
+bsd_kqueue_update (unix_file_poller_t * fp, unix_file_poller_update_t * u)
 {
   bsd_kqueue_main_t * km = &bsd_kqueue_main;
-  struct kevent changes[2];
+  bsd_epoll_event_data_t ed;
+  struct kevent64 changes[2];
+
+  ed.file_id = u->file_id;
+  ed.file_type = u->file_type;
 
   memset (&changes, 0, sizeof (changes));
 
-  EV_SET (&changes[0], f->file_descriptor, EVFILT_READ,
-          update_type == UNIX_FILE_POLLER_FILE_UPDATE_DELETE ? EV_DELETE : EV_ADD,
-          0, 0,
-          (void *) (f - um->file_pool));
+  EV_SET64 (&changes[0], u->file_descriptor, EVFILT_READ,
+	    u->type == UNIX_FILE_POLLER_UPDATE_DELETE ? EV_DELETE : EV_ADD,
+	    0, 0,
+	    ed.as_u64,
+	    0, 0);
   changes[1] = changes[0];
   changes[1].filter = EVFILT_WRITE;
 
-  if (kevent (km->kqueue_fd,
-              &changes[0],
-              (f->flags & UNIX_FILE_POLLER_FILE_DATA_AVAILABLE_TO_WRITE) ? 2 : 1,
-              /* eventlist */ 0,
-              /* n_events */ 0,
-              /* timeout */ 0) < 0)
+  if (kevent64 (km->kqueue_fd,
+		&changes[0],
+		1 + (u->is_write_ready != 0),
+		/* eventlist */ 0,
+		/* n_events */ 0,
+		/* flags */ 0,
+		/* timeout */ 0) < 0)
     clib_unix_warning ("kevent");
 }
 
 static uword
-bsd_kqueue_input (unix_file_poller_t * um, f64 timeout_in_sec)
+bsd_kqueue_input (unix_file_poller_t * fp, f64 timeout_in_sec)
 {
   bsd_kqueue_main_t * km = &bsd_kqueue_main;
-  struct kevent * e;
+  struct kevent64 * e;
   int n_fds_ready;
   struct timespec timeout;
 
   timeout.tv_sec = timeout_in_sec;
   timeout.tv_nsec = 1e9*(timeout_in_sec - timeout.tv_sec);
 
-  n_fds_ready = kevent (km->kqueue_fd,
-                        /* changes */ 0,
-                        /* n_changes */ 0,
-                        km->kevents,
-                        vec_len (km->kevents),
-                        &timeout);
+  n_fds_ready = kevent64 (km->kqueue_fd,
+			  /* changes */ 0,
+			  /* n_changes */ 0,
+			  km->kevents,
+			  vec_len (km->kevents),
+			  &timeout);
 
   if (n_fds_ready < 0)
     {
@@ -251,36 +262,38 @@ bsd_kqueue_input (unix_file_poller_t * um, f64 timeout_in_sec)
 
   for (e = km->kevents; e < km->kevents + n_fds_ready; e++)
     {
-      u32 i = pointer_to_uword (e->udata);
-      unix_file_poller_file_t * f = pool_elt_at_index (um->file_pool, i);
+      bsd_epoll_event_data_t ed;
       clib_error_t * errors[4];
       int n_errors = 0;
 
+      ed.as_u64 = e->udata;
+      ff = vec_elt (fp->file_functions_by_file_type, ed.file_type);
+
       if (e->filter == EVFILT_READ)
         {
-          errors[n_errors] = f->read_function (f);
-          n_errors += errors[n_errors] != 0;
+	  errors[n_errors] = ff->read_function (ff, ed.file_id);
+	  n_errors += errors[n_errors] != 0;
         }
       if (e->filter == EVFILT_WRITE)
         {
-          errors[n_errors] = f->write_function (f);
-          n_errors += errors[n_errors] != 0;
+	  errors[n_errors] = ff->write_function (ff, ed.file_id);
+	  n_errors += errors[n_errors] != 0;
 	}
       ASSERT (n_errors < ARRAY_LEN (errors));
       for (i = 0; i < n_errors; i++)
-	{
-	  unix_save_error (um, errors[i]);
-	}
+	unix_save_error (fp, errors[i]);
     }
 
   return n_fds_ready;
 }
 
 clib_error_t *
-unix_file_poller_init (unix_file_poller_t * um)
+unix_file_poller_init (unix_file_poller_t * fp)
 {
   bsd_kqueue_main_t * km = clib_mem_alloc_no_fail (sizeof (km[0]));
   
+  memset (km, 0, sizeof (km[0]));
+
   /* Allocate some events. */
   vec_resize (km->kevents, 256);
 
@@ -288,9 +301,9 @@ unix_file_poller_init (unix_file_poller_t * um)
   if (km->kqueue_fd < 0)
     return clib_error_return_unix (0, "kqueue");
 
-  um->file_update = bsd_kqueue_file_update;
-  um->poll_for_input = bsd_kqueue_input;
-  um->os_opaque = km;
+  fp->file_update = bsd_kqueue_file_update;
+  fp->poll_for_input = bsd_kqueue_input;
+  fp->os_opaque = km;
 
   return 0;
 }
