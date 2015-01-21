@@ -301,6 +301,10 @@ uword unformat_http_response (unformat_input_t * input, va_list * va)
                   unformat_line, &r->response.code_as_string))
     goto error;
 
+  /* Header only. */
+  if (unformat_check_input (input) == UNFORMAT_END_OF_INPUT)
+    return 1;
+
   while (1)
     {
       http_key_and_value_t l;
