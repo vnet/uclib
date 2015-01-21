@@ -219,7 +219,8 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
 
 static int
 parse_rx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
-                    uword * rx_buffer_advance)
+                    uword * rx_buffer_advance,
+		    clib_error_t ** error_return)
 {
   clib_socket_t * s = &ws->clib_socket;
   unformat_input_t input;
@@ -227,6 +228,7 @@ parse_rx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
   u8 * websocket_key = 0;
   int is_ok = 0;
 
+  *error_return = 0;
   unformat_init_vector (&input, s->rx_buffer);
   if (! unformat_user (&input, unformat_http_request, &r))
     goto done;
@@ -240,25 +242,40 @@ parse_rx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
   /* Host: must match. */
   if (hash_elts (wsm->host_name_hash) > 0
       && ! hash_get_mem (wsm->host_name_hash, http_request_value_for_key (&r, "host")))
-    goto done;
+    {
+      *error_return = clib_error_return (0, "host unknown: %v", s->rx_buffer);
+      goto done;
+    }
       
   /* Check client version. */
   if (! http_request_unformat_value_for_key (&r, "sec-websocket-version", "%d", &ws->websocket_version)
       || ws->websocket_version < 13
       || ws->websocket_version >= 256)
-    goto done;
+    {
+      *error_return = clib_error_return (0, "sec-websocket-version unknown: %v", s->rx_buffer);
+      goto done;
+    }
 
   if (! http_request_value_for_key_compare (&r, "upgrade", "websocket"))
-    goto done;
+    {
+      *error_return = clib_error_return (0, "upgrade: websocket missing: %v", s->rx_buffer);
+      goto done;
+    }
   if (! http_request_value_for_key_compare (&r, "connection", "Upgrade"))
-    goto done;
+    {
+      *error_return = clib_error_return (0, "connection: Upgrade missing: %v", s->rx_buffer);
+      goto done;
+    }
 
   {
     u8 * v = http_request_value_for_key (&r, "sec-websocket-key");
     u8 sum[20];
 
     if (! v)
-      goto done;
+      {
+	*error_return = clib_error_return (0, "sec-sebsocket-key missing: %v", s->rx_buffer);
+	goto done;
+      }
 
     websocket_key = format (0, "%v%s", v, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
     sha1 (sum, websocket_key, vec_len (websocket_key));
@@ -291,26 +308,41 @@ parse_rx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
 
 static int
 parse_tx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
-                    uword * rx_buffer_advance)
+                    uword * rx_buffer_advance,
+		    clib_error_t ** error_return)
 {
   clib_socket_t * s = &ws->clib_socket;
   unformat_input_t input;
   http_request_or_response_t r;
   int is_ok = 0;
 
+  *error_return = 0;
   unformat_init_vector (&input, s->rx_buffer);
   if (! unformat_user (&input, unformat_http_response, &r))
     goto done;
 
   if (r.http_version[0] != 1 && r.http_version[1] != 1)
-    goto done;
+    {
+      *error_return = clib_error_return (0, "http version was %d.%d (expected 1.1)",
+					 r.http_version[0], r.http_version[1]);
+      goto done;
+    }
   if (r.response.code != 101)
-    goto done;
+    {
+      *error_return = clib_error_return (0, "failed response: %v", s->rx_buffer);
+      goto done;
+    }
 
   if (! http_request_value_for_key_compare (&r, "upgrade", "websocket"))
-    goto done;
+    {
+      *error_return = clib_error_return (0, "upgrade: websocket not present: %v", s->rx_buffer);
+      goto done;
+    }
   if (! http_request_value_for_key_compare (&r, "connection", "Upgrade"))
-    goto done;
+    {
+      *error_return = clib_error_return (0, "connection: Upgrade not present: %v", s->rx_buffer);
+      goto done;
+    }
 
   {
     u8 * sec_websocket_accept = 0;
@@ -319,7 +351,10 @@ parse_tx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
     uword sum_matches;
 
     if (! http_request_unformat_value_for_key (&r, "sec-websocket-accept", "%U", unformat_base64_data, &sec_websocket_accept))
-      goto done;
+      {
+	*error_return = clib_error_return (0, "sec-websocket-accept invalid: %v", s->rx_buffer);
+	goto done;
+      }
 
     websocket_key = format (0, "%U%s",
                             format_base64_data, ws->client.sec_websocket_key_random_bytes, sizeof (ws->client.sec_websocket_key_random_bytes),
@@ -333,7 +368,10 @@ parse_tx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
     vec_free (websocket_key);
 
     if (! sum_matches)
-      goto done;
+      {
+	*error_return = clib_error_return (0, "sec-websocket-accept sha1 sum mismatch: %v", s->rx_buffer);
+	goto done;
+      }
 
     is_ok = 1;
   }
@@ -409,13 +447,18 @@ websocket_server_file_read_ready (unix_file_poller_file_functions_t * ff, u32 we
   if (! ws->handshake_rx)
     {
       uword rx_buffer_advance;
-      if (! parse_rx_handshake (wsm, ws, &rx_buffer_advance))
+      if (! parse_rx_handshake (wsm, ws, &rx_buffer_advance, &error))
         {
           f64 time_now = unix_time_now ();
           if (time_now > ws->time_stamp_of_connection_creation + wsm->rx_handshake_timeout_in_sec)
             return websocket_rx_handshake_timeout (wsm, ws);
           else
-            return error;
+	    {
+	      if (error)
+		return websocket_main_close_socket (wsm, ws, error);
+	      else
+		return error;
+	    }
         }
 
       ws->handshake_rx = 1;
@@ -502,16 +545,28 @@ websocket_client_file_read_ready (unix_file_poller_file_functions_t * ff, u32 we
   if (! ws->handshake_rx)
     {
       uword rx_buffer_advance;
-      if (! parse_tx_handshake (wsm, ws, &rx_buffer_advance))
+      if (! parse_tx_handshake (wsm, ws, &rx_buffer_advance, &error))
         {
           f64 time_now = unix_time_now ();
           if (time_now > ws->time_stamp_of_connection_creation + wsm->rx_handshake_timeout_in_sec)
             return websocket_rx_handshake_timeout (wsm, ws);
           else
-            return error;
+	    {
+	      if (error)
+		return websocket_main_close_socket (wsm, ws, error);
+	      else
+		return error;
+	    }
         }
 
       ws->handshake_rx = 1;
+
+      if (wsm->did_receive_handshake)
+        {
+          error = wsm->did_receive_handshake (wsm, ws);
+          if (error)
+            return websocket_main_close_socket (wsm, ws, error);
+        }
 
       /* Remove handshake from RX buffer. */
       vec_delete (s->rx_buffer, rx_buffer_advance, 0);
@@ -584,8 +639,9 @@ websocket_client_file_write_ready (unix_file_poller_file_functions_t * ff, u32 w
 
         clib_socket_tx_add_formatted
           (s,
-           "GET %v%s%v HTTP/1.1\r\n"
+           "GET /%v%s%v HTTP/1.1\r\n"
            "Host: %v\r\n"
+	   "Origin: http://%v\r\n"
            "Upgrade: websocket\r\n"
            "Connection: Upgrade\r\n"
            "Sec-WebSocket-Key: %U\r\n"
@@ -594,7 +650,8 @@ websocket_client_file_write_ready (unix_file_poller_file_functions_t * ff, u32 w
            url_path (url),
            vec_len (url_query (url)) > 0 ? "?" : "",
            url_query (url),
-           url_host (url),
+           url_socket_config (url),
+	   url_host (url),
            format_base64_data, ws->client.sec_websocket_key_random_bytes, sizeof (ws->client.sec_websocket_key_random_bytes));
       }
   }
@@ -810,6 +867,8 @@ websocket_client_add_connection (websocket_main_t * wsm, websocket_socket_t ** w
   va_end (va);
 
   ws = websocket_socket_alloc (wsm);
+
+  vec_add1 (url, 0);		/* null terminate */
 
   error = url_parse_components ((u8 *) url, &ws->client.url);
   if (error)
