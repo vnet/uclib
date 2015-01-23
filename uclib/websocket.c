@@ -762,28 +762,35 @@ void websocket_close_all_sockets_with_no_handshake (websocket_main_t * wsm)
 static clib_error_t * websocket_socket_tx_frame_helper (websocket_socket_t * ws, uword is_binary)
 {
   clib_socket_t * s = &ws->clib_socket;
-  u32 l;
-  u8 * f, framing_data[2 + 8];
+  u32 l, is_masked;
+  u8 * f, framing_data[2 + 8 + 4];
 
   f = framing_data;
 
   *f++ = (WEBSOCKET_DATA_FRAMING_IS_FINAL_FRAGMENT |
           (is_binary ? WEBSOCKET_DATA_FRAMING_OPCODE_BINARY_DATA : WEBSOCKET_DATA_FRAMING_OPCODE_TEXT_DATA));
 
+  is_masked = WEBSOCKET_DATA_FRAMING_PAYLOAD_IS_MASKED;
   l = vec_len (s->current_tx_buffer);
   if (l < 126)
-    *f++ = l;
+    *f++ = l | is_masked;
   else if (l < (1 << 16))
     {
-      f[0] = 126;
+      f[0] = 126 | is_masked;
       clib_mem_unaligned (f + 1, u16) = clib_host_to_net_u16 (l);
       f += 1 + sizeof (u16);
     }
   else
     {
-      f[0] = 127;
+      f[0] = 127 | is_masked;
       clib_mem_unaligned (f + 1, u64) = clib_host_to_net_u64 ((u64) l);
       f += 1 + sizeof (u64);
+    }
+
+  if (is_masked)
+    {
+      memset (f, 0, 4);
+      f += 4;
     }
 
   /* Add framing to buffer fifo.  Framing data will be added to tail of
