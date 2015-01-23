@@ -154,5 +154,6 @@ unformat_function_t unformat_http_response;
 
 format_function_t format_http_request_method;
 format_function_t format_http_request;
+format_function_t format_http_response;
 
 #endif /* included_clib_http_h */
