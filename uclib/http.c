@@ -368,7 +368,12 @@ u8 * format_http_request (u8 * s, va_list * va)
 u8 * format_http_response (u8 * s, va_list * va)
 {
   http_request_or_response_t * r = va_arg (*va, http_request_or_response_t *);
+  ASSERT (r->is_response);
+  s = format (s, "HTTP %d.%d, status: %d %v",
+	      r->http_version[0], r->http_version[1],
+	      r->response.code, r->response.code_as_string);
+
   /* FIXME implement */
-  ASSERT (0);
+
   return s;
 }
