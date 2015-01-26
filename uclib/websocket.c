@@ -669,7 +669,7 @@ static void add_file_type (websocket_main_t * wsm, websocket_connection_type_t t
 {
   wsm->unix_file_poller_file_functions[t] = f;
   wsm->unix_file_poller_file_type[t]
-    = unix_file_poller_add_file_type (wsm->unix_file_poller, &wsm->unix_file_poller_file_functions[t]);
+    = unix_file_poller_register_file_functions (&wsm->unix_file_poller_file_functions[t]);
 }
 
 clib_error_t *

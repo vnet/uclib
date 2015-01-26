@@ -65,14 +65,18 @@ typedef struct unix_file_poller_t {
   /* Poll file desciptors for input or output: returns number of files polled. */
   uword (* poll_for_input) (struct unix_file_poller_t * fp, f64 timeout_in_sec);
 
-  /* Vector of read/write/error handler functions by file type. */
-  unix_file_poller_file_functions_t ** file_functions_by_file_type;
-
   /* Circular buffer of last unix errors. */
   unix_error_history_t error_history[128];
   u32 error_history_index;
   u64 n_total_errors;
 } unix_file_poller_t;
+
+/* Pool of read/write/error handler functions by file type. */
+unix_file_poller_file_functions_t ** unix_file_poller_file_function_pool;
+
+always_inline uword
+unix_file_poller_register_file_functions (unix_file_poller_file_functions_t * f)
+{ return pool_set_elt (unix_file_poller_file_function_pool, f); }
 
 always_inline void
 unix_file_poller_free (unix_file_poller_t * fp)
@@ -95,13 +99,6 @@ unix_save_error (unix_file_poller_t * fp, clib_error_t * error)
   fp->n_total_errors += 1;
   if (++fp->error_history_index >= ARRAY_LEN (fp->error_history))
     fp->error_history_index = 0;
-}
-
-always_inline uword unix_file_poller_add_file_type (unix_file_poller_t * fp, unix_file_poller_file_functions_t * ff)
-{
-  uword t = vec_len (fp->file_functions_by_file_type);
-  vec_add1 (fp->file_functions_by_file_type, ff);
-  return t;
 }
 
 clib_error_t *

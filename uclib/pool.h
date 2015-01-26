@@ -165,6 +165,16 @@ do {									\
 /* Allocate an object E from a pool P (unspecified alignment) */
 #define pool_get(P,E) pool_get_aligned(P,E,0)
 
+#define pool_set_elt_aligned(P,E,A)					\
+({									\
+  uword _pool_var (i);							\
+  (P) = pool_get_free_index_aligned ((P), sizeof (P[0]), (A), &_pool_var (i)); \
+  (P)[_pool_var (i)] = (E);						\
+  _pool_var (i);							\
+})
+
+#define pool_set_elt(P,E) pool_set_elt_aligned(P,E,0)
+
 /* Use free bitmap to query whether given index is free */
 always_inline uword
 pool_is_free_index (void * v, uword i)
@@ -326,11 +336,18 @@ do {									\
     one can write correct code of the form "p = pool_base + index",
     use of pool_elt_at_index is strongly suggested. 
  */
-#define pool_elt_at_index(p,i)			\
-({						\
-  typeof (p) _e = (p) + (i);			\
-  ASSERT (! pool_is_free (p, _e));		\
-  _e;						\
+#define pool_elt_at_index(P,I)				\
+({							\
+  uword _pool_var (i) = (I);				\
+  ASSERT (! pool_is_free_index ((P), _pool_var (i)));	\
+  (P) + _pool_var (i);					\
+})
+
+#define pool_elt(P,I)					\
+({							\
+  uword _pool_var (i) = (I);				\
+  ASSERT (! pool_is_free_index ((P), _pool_var (i)));	\
+  (P)[_pool_var (i)];					\
 })
 
 /* Return next occupied pool index after i, useful for safe iteration */
