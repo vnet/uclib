@@ -185,8 +185,8 @@ always_inline uword max_pow2 (uword x)
 #include <uclib/vec_bootstrap.h>
 #include <uclib/mheap_bootstrap.h>
 
-#include <uclib/mem.h>
 #include <uclib/error.h>
+#include <uclib/mem.h>
 #include <uclib/mheap.h>
 #include <uclib/vec.h>
 

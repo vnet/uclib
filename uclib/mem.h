@@ -95,6 +95,19 @@ clib_mem_alloc_aligned (uword size, uword align)
 
 #define clib_mem_alloc_no_fail(size) clib_mem_alloc_aligned_no_fail(size,1)
 
+always_inline void *
+clib_mem_alloc_in_container (uword sizeof_object, uword sizeof_container, uword container_offset_of_object)
+{
+  void * c;
+
+  /* Object must fit in container. */
+  ASSERT (sizeof_container >= sizeof_object);
+  ASSERT (container_offset_of_object + sizeof_object <= sizeof_container);
+  c = clib_mem_alloc_no_fail (sizeof_container);
+  memset (c, 0, sizeof_container);
+  return c + container_offset_of_object;
+}
+
 /* Alias to stack allocator for naming consistency. */
 #define clib_mem_alloc_stack(bytes) __builtin_alloca(bytes)
 
@@ -123,6 +136,10 @@ always_inline void clib_mem_free (void * p)
 
   mheap_put (heap, (u8 *) p - heap);
 }
+
+always_inline void
+clib_mem_free_in_container (void * object, uword container_offset_of_object)
+{ clib_mem_free (object - container_offset_of_object); }
 
 always_inline void * clib_mem_realloc (void * p, uword new_size, uword old_size)
 {
