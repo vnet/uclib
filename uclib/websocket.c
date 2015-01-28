@@ -898,6 +898,7 @@ websocket_client_add_connection (websocket_main_t * wsm, websocket_socket_t ** w
       .file_type = websocket_unix_file_poller_file_type (wsm, ws),
       .is_write_ready = 1,
     };
+    ws->is_tx_data_available_to_write = u.is_write_ready;
     wsm->unix_file_poller->update (wsm->unix_file_poller, &u);
   }
 
