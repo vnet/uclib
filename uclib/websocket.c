@@ -24,13 +24,6 @@
 #include <uclib/uclib.h>
 
 always_inline websocket_socket_t *
-websocket_at_index (websocket_main_t * wsm, u32 i)
-{
-  ASSERT (! pool_is_free_index (wsm->user_socket_pool, i));
-  return wsm->user_socket_pool + i*wsm->user_socket_n_bytes + wsm->user_socket_offset_of_websocket;
-}
-
-always_inline websocket_socket_t *
 websocket_socket_alloc (websocket_main_t * wsm)
 {
   void * s;

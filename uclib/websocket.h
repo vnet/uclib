@@ -154,6 +154,13 @@ typedef struct websocket_main_t {
   u32 verbose;
 } websocket_main_t;
 
+always_inline websocket_socket_t *
+websocket_at_index (websocket_main_t * wsm, u32 i)
+{
+  ASSERT (! pool_is_free_index (wsm->user_socket_pool, i));
+  return wsm->user_socket_pool + i*wsm->user_socket_n_bytes + wsm->user_socket_offset_of_websocket;
+}
+
 clib_error_t * websocket_init (websocket_main_t * wsm);
 void websocket_main_free (websocket_main_t * wsm);
 
