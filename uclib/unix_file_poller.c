@@ -268,7 +268,7 @@ bsd_kqueue_input (unix_file_poller_t * fp, f64 timeout_in_sec)
         int i;
 
       ed.as_u64 = e->udata;
-      ff = vec_elt (fp->file_functions_by_file_type, ed.file_type);
+      ff = pool_elt (unix_file_poller_file_function_pool, ed.file_type);
 
       if (e->filter == EVFILT_READ)
         {
