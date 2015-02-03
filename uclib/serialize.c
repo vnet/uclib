@@ -583,12 +583,18 @@ void unserialize_check_magic (serialize_main_t * m, void * magic, u32 magic_byte
     goto bad;
 }
 
-clib_error_t *
-va_serialize (serialize_main_t * sm, va_list * va)
+static clib_error_t *
+va_serialize_internal (serialize_main_t * sm, va_list * va, uword is_serialize)
 {
   serialize_main_header_t * m = &sm->header;
   serialize_function_t * f = va_arg (*va, serialize_function_t *);
   clib_error_t * error = 0;
+
+  /* Protect against serialize calls calling unserialize and vice versa. */
+  if (m->recursion_level == 0)
+    m->is_serialize = is_serialize;
+  else
+    ASSERT (m->is_serialize == is_serialize);
 
   m->recursion_level += 1;
   if (m->recursion_level == 1)
@@ -608,13 +614,21 @@ va_serialize (serialize_main_t * sm, va_list * va)
 }
 
 clib_error_t *
+va_serialize (serialize_main_t * sm, va_list * va)
+{ return va_serialize_internal (sm, va, /* is_serialize */ 1); }
+
+clib_error_t *
+va_unserialize (serialize_main_t * sm, va_list * va)
+{ return va_serialize_internal (sm, va, /* is_serialize */ 0); }
+
+clib_error_t *
 serialize (serialize_main_t * m, ...)
 {
   clib_error_t * error;
   va_list va;
 
   va_start (va, m);
-  error = va_serialize (m, &va);
+  error = va_serialize_internal (m, &va, /* is_serialize */ 1);
   va_end (va);
   return error;
 }
@@ -626,7 +640,7 @@ unserialize (serialize_main_t * m, ...)
   va_list va;
 
   va_start (va, m);
-  error = va_serialize (m, &va);
+  error = va_serialize_internal (m, &va, /* is_serialize */ 0);
   va_end (va);
   return error;
 }

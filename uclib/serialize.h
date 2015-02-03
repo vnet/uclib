@@ -81,7 +81,9 @@ serialize_stream_is_end_of_stream (serialize_stream_t * s)
 { return (s->flags & SERIALIZE_END_OF_STREAM) != 0; }
 
 typedef struct serialize_main_header_t {
-  uword recursion_level;
+  u32 recursion_level;
+
+  u32 is_serialize;
 
   /* Data callback function and opaque data. */
   serialize_data_function_t * data_function;
@@ -163,6 +165,18 @@ unserialize_get (serialize_main_t * m, uword n_bytes)
 always_inline void *
 serialize_get (serialize_main_t * m, uword n_bytes)
 { return serialize_stream_read_write (&m->header, &m->stream, n_bytes, SERIALIZE_FLAG_IS_WRITE); }
+
+always_inline void serialize_data (serialize_main_t * m, void * data, uword n_bytes)
+{
+  void * p = serialize_get (m, n_bytes);
+  memcpy (p, data, n_bytes);
+}
+
+always_inline void unserialize_data (serialize_main_t * m, void * data, uword n_bytes)
+{
+  void * p = unserialize_get (m, n_bytes);
+  memcpy (data, p, n_bytes);
+}
 
 always_inline void
 serialize_set_end_of_stream (serialize_main_t * m)
@@ -449,6 +463,7 @@ void unserialize_open_unix_file_descriptor (serialize_main_t * m, int fd);
 clib_error_t * serialize (serialize_main_t * m, ...);
 clib_error_t * unserialize (serialize_main_t * m, ...);
 clib_error_t * va_serialize (serialize_main_t * m, va_list * va);
+clib_error_t * va_unserialize (serialize_main_t * m, va_list * va);
 
 void serialize_magic (serialize_main_t * m, void * magic, u32 magic_bytes);
 void unserialize_check_magic (serialize_main_t * m, void * magic, u32 magic_bytes,
