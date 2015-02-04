@@ -24,7 +24,7 @@
 #ifndef included_clib_byte_order_h
 #define included_clib_byte_order_h
 
-#if defined(__x86_64__) || defined(i386)
+#if defined(__x86_64__) || defined(i386) || defined (__ARMEL__) || defined (__AARCH64EL__)
 #define CLIB_ARCH_IS_BIG_ENDIAN (0)
 #define CLIB_ARCH_IS_LITTLE_ENDIAN (1)
 #else

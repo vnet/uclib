@@ -358,7 +358,6 @@ parse_tx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
     sum_matches = (vec_len (sec_websocket_accept) == sizeof (sum)
                    && ! memcmp (sec_websocket_accept, sum, sizeof (sum)));
     vec_free (sec_websocket_accept);
-    vec_free (websocket_key);
 
     if (! sum_matches)
       {
