@@ -322,18 +322,18 @@ parse_tx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
     }
   if (r.response.code != 101)
     {
-      *error_return = clib_error_return (0, "failed response: %v", s->rx_buffer);
+      *error_return = clib_error_return (0, "failed response: %U", format_http_response, &r);
       goto done;
     }
 
   if (! http_request_value_for_key_compare (&r, "upgrade", "websocket"))
     {
-      *error_return = clib_error_return (0, "upgrade: websocket not present: %v", s->rx_buffer);
+      *error_return = clib_error_return (0, "upgrade: websocket not present: %U", format_http_response, &r);
       goto done;
     }
   if (! http_request_value_for_key_compare (&r, "connection", "Upgrade"))
     {
-      *error_return = clib_error_return (0, "connection: Upgrade not present: %v", s->rx_buffer);
+      *error_return = clib_error_return (0, "connection: Upgrade not present: %U", format_http_response, &r);
       goto done;
     }
 
@@ -345,7 +345,7 @@ parse_tx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
 
     if (! http_request_unformat_value_for_key (&r, "sec-websocket-accept", "%U", unformat_base64_data, &sec_websocket_accept))
       {
-	*error_return = clib_error_return (0, "sec-websocket-accept invalid: %v", s->rx_buffer);
+	*error_return = clib_error_return (0, "sec-websocket-accept invalid: %U", format_http_response, &r);
 	goto done;
       }
 
@@ -361,7 +361,8 @@ parse_tx_handshake (websocket_main_t * wsm, websocket_socket_t * ws,
 
     if (! sum_matches)
       {
-	*error_return = clib_error_return (0, "sec-websocket-accept sha1 sum mismatch: %v", s->rx_buffer);
+	*error_return = clib_error_return (0, "sec-websocket-accept sha1 sum mismatch: %U",
+					   format_http_response, &r);
 	goto done;
       }
 

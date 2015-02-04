@@ -368,12 +368,17 @@ u8 * format_http_request (u8 * s, va_list * va)
 u8 * format_http_response (u8 * s, va_list * va)
 {
   http_request_or_response_t * r = va_arg (*va, http_request_or_response_t *);
-  ASSERT (r->is_response);
+  http_key_and_value_t * l;
+  uword indent = format_get_indent (s);
+
   s = format (s, "HTTP %d.%d, status: %d %v",
 	      r->http_version[0], r->http_version[1],
 	      r->response.code, r->response.code_as_string);
 
-  /* FIXME implement */
+  vec_foreach (l, r->lines)
+    s = format (s, "\n%U  %v: %v",
+		format_white_space, indent,
+		l->key, l->value);
 
   return s;
 }
