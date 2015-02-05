@@ -204,7 +204,7 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
     {
       websocket_main_close_socket (wsm, ws, error);
       ASSERT (rx_frame_parsed == 0);
-      unix_save_error (wsm->unix_file_poller, error);
+      unix_file_poller_save_error (wsm->unix_file_poller, error);
     }
 
   return rx_frame_parsed;
@@ -745,7 +745,7 @@ void websocket_close_all_sockets_with_no_handshake (websocket_main_t * wsm)
     clib_bitmap_foreach (i, close_bitmap, ({
       ws = websocket_at_index (wsm, i);
       error = websocket_rx_handshake_timeout (wsm, ws);
-      unix_save_error (wsm->unix_file_poller, error);
+      unix_file_poller_save_error (wsm->unix_file_poller, error);
     }));
   }
 

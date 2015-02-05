@@ -25,6 +25,25 @@
 
 #include <uclib/uclib.h>
 
+static clib_error_t *
+unix_file_poller_default_event_handler (unix_file_poller_file_functions_t * ff,
+                                        u32 file_id,
+                                        unix_file_poller_event_type_t event_type)
+{
+  switch (event_type)
+    {
+    case UNIX_FILE_POLLER_EVENT_READ:
+      return ff->read_function (ff, file_id);
+    case UNIX_FILE_POLLER_EVENT_WRITE:
+      return ff->write_function (ff, file_id);
+    case UNIX_FILE_POLLER_EVENT_ERROR:
+      return ff->error_function (ff, file_id);
+    default:
+      ASSERT (0);
+      return 0;
+    }
+}
+
 #ifdef __linux__
 
 #include <sys/epoll.h>
@@ -87,7 +106,7 @@ linux_epoll_input (unix_file_poller_t * fp, f64 timeout_in_sec)
     n_fds_ready = epoll_pwait (em->epoll_fd,
                                em->epoll_events,
                                vec_len (em->epoll_events),
-                               (int) (timeout_in_sec * 1e3),
+                               timeout_in_sec < 0 ? -1 : (int) (timeout_in_sec * 1e3),
                                &unblock_all_signals);
   }
 
@@ -117,19 +136,19 @@ linux_epoll_input (unix_file_poller_t * fp, f64 timeout_in_sec)
 	{
 	  if (e->events & EPOLLOUT)
 	    {
-	      errors[n_errors] = ff->write_function (ff, ed.file_id);
+              errors[n_errors] = fp->event_handler (ff, ed.file_id, UNIX_FILE_POLLER_EVENT_WRITE);
 	      n_errors += errors[n_errors] != 0;
 	    }
 	  if (e->events & EPOLLIN)
 	    {
-	      errors[n_errors] = ff->read_function (ff, ed.file_id);
+              errors[n_errors] = fp->event_handler (ff, ed.file_id, UNIX_FILE_POLLER_EVENT_READ);
 	      n_errors += errors[n_errors] != 0;
 	      n_input_events += 1;
 	    }
 	}
       else
 	{
-	  errors[n_errors] = ff->error_function (ff, ed.file_id);
+          errors[n_errors] = fp->event_handler (ff, ed.file_id, UNIX_FILE_POLLER_EVENT_ERROR);
 	  n_errors += errors[n_errors] != 0;
 	}
 
@@ -137,7 +156,7 @@ linux_epoll_input (unix_file_poller_t * fp, f64 timeout_in_sec)
 	uword i;
 	ASSERT (n_errors < ARRAY_LEN (errors));
 	for (i = 0; i < n_errors; i++)
-	  unix_save_error (fp, errors[i]);
+	  unix_file_poller_save_error (fp, errors[i]);
       }
     }
 
@@ -171,6 +190,7 @@ unix_file_poller_init (unix_file_poller_t * fp)
   fp->poll_for_input = linux_epoll_input;
   fp->free = linux_epoll_free;
   fp->os_opaque = em;
+  fp->event_handler = unix_file_poller_default_event_handler;
 
   return 0;
 }
@@ -245,7 +265,7 @@ bsd_kqueue_input (unix_file_poller_t * fp, f64 timeout_in_sec)
 			  km->kevents,
 			  vec_len (km->kevents),
                           /* flags */ 0,
-			  &timeout);
+			  timeout_in_sec < 0 ? 0 : &timeout);
 
   if (n_fds_ready < 0)
     {
@@ -272,17 +292,17 @@ bsd_kqueue_input (unix_file_poller_t * fp, f64 timeout_in_sec)
 
       if (e->filter == EVFILT_READ)
         {
-	  errors[n_errors] = ff->read_function (ff, ed.file_id);
+          errors[n_errors] = fp->event_handler (ff, ed.file_id, UNIX_FILE_POLLER_EVENT_READ);
 	  n_errors += errors[n_errors] != 0;
         }
       if (e->filter == EVFILT_WRITE)
         {
-	  errors[n_errors] = ff->write_function (ff, ed.file_id);
+          errors[n_errors] = fp->event_handler (ff, ed.file_id, UNIX_FILE_POLLER_EVENT_WRITE);
 	  n_errors += errors[n_errors] != 0;
 	}
       ASSERT (n_errors < ARRAY_LEN (errors));
       for (i = 0; i < n_errors; i++)
-	unix_save_error (fp, errors[i]);
+	unix_file_poller_save_error (fp, errors[i]);
     }
 
   return n_fds_ready;
@@ -315,6 +335,7 @@ unix_file_poller_init (unix_file_poller_t * fp)
   fp->free = bsd_kqueue_free;
   fp->poll_for_input = bsd_kqueue_input;
   fp->os_opaque = km;
+  fp->event_handler = unix_file_poller_default_event_handler;
 
   return 0;
 }

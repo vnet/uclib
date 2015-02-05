@@ -53,6 +53,12 @@ typedef struct {
   u32 is_write_ready;
 } unix_file_poller_update_t;
 
+typedef enum {
+  UNIX_FILE_POLLER_EVENT_READ,
+  UNIX_FILE_POLLER_EVENT_WRITE,
+  UNIX_FILE_POLLER_EVENT_ERROR,
+} unix_file_poller_event_type_t;
+
 typedef struct unix_file_poller_t {
   /* File descriptor update function (e.g. epoll for linux; kqueue for *BSD). */
   void (* update) (struct unix_file_poller_t * fp, unix_file_poller_update_t * update);
@@ -64,6 +70,8 @@ typedef struct unix_file_poller_t {
 
   /* Poll file desciptors for input or output: returns number of files polled. */
   uword (* poll_for_input) (struct unix_file_poller_t * fp, f64 timeout_in_sec);
+
+  clib_error_t * (* event_handler) (unix_file_poller_file_functions_t * ff, u32 file_id, unix_file_poller_event_type_t type);
 
   /* Circular buffer of last unix errors. */
   unix_error_history_t error_history[128];
@@ -90,7 +98,7 @@ unix_file_poller_free (unix_file_poller_t * fp)
 }
 
 always_inline void
-unix_save_error (unix_file_poller_t * fp, clib_error_t * error)
+unix_file_poller_save_error (unix_file_poller_t * fp, clib_error_t * error)
 {
   unix_error_history_t * eh = fp->error_history + fp->error_history_index;
   clib_error_free_vector (eh->error);
