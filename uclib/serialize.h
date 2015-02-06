@@ -457,7 +457,7 @@ clib_error_t * unserialize_open_unix_file_with_flags_and_mode (serialize_main_t 
 void serialize_open_unix_file_descriptor (serialize_main_t * m, int fd);
 void unserialize_open_unix_file_descriptor (serialize_main_t * m, int fd);
 
-#define SERIALIZE_END_OF_STREAM_ERROR (uword_to_pointer (1, clib_error_t *))
+#define UNSERIALIZE_PAST_END_OF_STREAM_ERROR_CODE 1
 
 /* Main routines. */
 clib_error_t * serialize (serialize_main_t * m, ...);

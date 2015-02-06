@@ -874,7 +874,11 @@ static void * serialize_read_not_inline (serialize_main_header_t * m,
 	{
 	  /* Attempt to read beyond end of stream. */
 	  if (m->recursion_level > 0)
-	    serialize_error (m, SERIALIZE_END_OF_STREAM_ERROR);
+            {
+              clib_error_t * e = clib_error_return_code (0, UNSERIALIZE_PAST_END_OF_STREAM_ERROR_CODE, /* flags */ 0,
+                                                         "unserialize past end of stream");
+              serialize_error (m, e);
+            }
 	  else
 	    /* Zero return means end of stream. */
 	    return 0;
