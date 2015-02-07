@@ -921,7 +921,7 @@ static void serialize_read_write_close (serialize_main_header_t * m, serialize_s
   serialize_stream_set_end_of_stream (s);
 
   /* Call it one last time to flush buffer and close. */
-  if (s->current_buffer_index > 0)
+  if (s->current_buffer_index > 0 && m->data_function)
     m->data_function (m, s);
 
   vec_free (s->overflow_buffer);
