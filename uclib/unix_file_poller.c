@@ -236,11 +236,12 @@ bsd_kqueue_update (unix_file_poller_t * fp, unix_file_poller_update_t * u)
 	    ed.as_u64,
 	    0, 0);
   changes[1] = changes[0];
+  changes[1].flags |= (u->is_write_ready ? EV_ENABLE : EV_DISABLE);
   changes[1].filter = EVFILT_WRITE;
 
   if (kevent64 (km->kqueue_fd,
 		&changes[0],
-		1 + (u->is_write_ready != 0),
+                ARRAY_LEN (changes),
 		/* eventlist */ 0,
 		/* n_events */ 0,
 		/* flags */ 0,

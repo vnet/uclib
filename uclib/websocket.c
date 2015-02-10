@@ -650,8 +650,6 @@ websocket_client_file_write_ready (unix_file_poller_file_functions_t * ff, u32 w
   }
 
   error = clib_socket_tx (s);
-  if (error && unix_error_is_fatal (errno))
-    return error;
 
   websocket_socket_update_write_data_available (wsm, ws);
 
