@@ -189,6 +189,8 @@ static int parse_rx_frame (websocket_main_t * wsm, websocket_socket_t * ws)
 
       ASSERT (wsm->rx_frame_payload);
       error = wsm->rx_frame_payload (wsm, ws, rx_frame_start + n_bytes_in_frame_header, n_bytes_of_payload);
+      if (error)
+        goto done;
 
       n_left_in_rx_buffer -= n_bytes_in_frame_header + n_bytes_of_payload;
       rx = rx_frame_start + n_bytes_in_frame_header + n_bytes_of_payload;
