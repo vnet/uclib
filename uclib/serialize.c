@@ -351,13 +351,17 @@ uword * unserialize_bitmap (serialize_main_t * m)
   return b;
 }
 
-void serialize_pool (serialize_main_t * m, va_list * va)
+static void serialize_pool_helper (serialize_main_t * m, uword serialize_function_with_arg, va_list * va)
 {
   void * pool = va_arg (*va, void *);
   u32 elt_bytes = va_arg (*va, u32);
   serialize_function_t * f = va_arg (*va, serialize_function_t *);
+  uword f_arg = 0;
   u32 l, lo, hi;
   pool_header_t * p;
+
+  if (serialize_function_with_arg)
+    f_arg = va_arg (*va, uword);
 
   l = vec_len (pool);
   serialize_integer (m, l, sizeof (u32));
@@ -369,14 +373,25 @@ void serialize_pool (serialize_main_t * m, va_list * va)
      to guarantee that unserialized pool will be identical. */
   vec_serialize (m, p->free_indices, serialize_vec_32);
 
-  pool_foreach_region (lo, hi, pool,
-		       serialize (m, f, pool + lo*elt_bytes, hi - lo));
+  pool_foreach_region (lo, hi, pool, ({
+        void * base = pool + lo*elt_bytes;
+        uword n_elts = hi - lo;
+        if (serialize_function_with_arg)
+          serialize (m, f, f_arg, base, n_elts);
+        else
+          serialize (m, f, base, n_elts);
+  }));
 }
+
+void serialize_pool (serialize_main_t * m, va_list * va)
+{ serialize_pool_helper (m, /* serialize_function_with_arg */ 0, va); }
 
 static void *
 unserialize_pool_helper (serialize_main_t * m,
 			 u32 elt_bytes, u32 align,
-			 serialize_function_t * f)
+			 serialize_function_t * f,
+                         uword with_arg,
+                         uword f_arg)
 {
   void * v;
   u32 i, l, lo, hi;
@@ -384,9 +399,7 @@ unserialize_pool_helper (serialize_main_t * m,
 
   unserialize_integer (m, &l, sizeof (l));
   if (l == 0)
-    {
-      return 0;
-    }
+    return 0;
 
   v = _vec_resize (0, l, 0, elt_bytes, sizeof (p[0]), align);
   p = pool_header (v);
@@ -398,8 +411,14 @@ unserialize_pool_helper (serialize_main_t * m,
   for (i = 0; i < vec_len (p->free_indices); i++)
     p->free_bitmap = clib_bitmap_ori (p->free_bitmap, p->free_indices[i]);
 
-  pool_foreach_region (lo, hi, v,
-		       unserialize (m, f, v + lo*elt_bytes, hi - lo));
+  pool_foreach_region (lo, hi, v, ({
+        void * base = v + lo*elt_bytes;
+        uword n_elts = hi - lo;
+        if (with_arg)
+          unserialize (m, f, f_arg, base, n_elts);
+        else
+          unserialize (m, f, base, n_elts);
+  }));
 
   return v;
 }
@@ -409,7 +428,8 @@ void unserialize_pool (serialize_main_t * m, va_list * va)
   void ** result = va_arg (*va, void **);
   u32 elt_bytes = va_arg (*va, u32);
   serialize_function_t * f = va_arg (*va, serialize_function_t *);
-  *result = unserialize_pool_helper (m, elt_bytes, /* align */ 0, f);
+  *result = unserialize_pool_helper (m, elt_bytes, /* align */ 0, f,
+                                     /* with_arg */ 0, /* f_arg*/ 0);
 }
 
 void unserialize_aligned_pool (serialize_main_t * m, va_list * va)
@@ -418,7 +438,21 @@ void unserialize_aligned_pool (serialize_main_t * m, va_list * va)
   u32 elt_bytes = va_arg (*va, u32);
   u32 align = va_arg (*va, u32);
   serialize_function_t * f = va_arg (*va, serialize_function_t *);
-  *result = unserialize_pool_helper (m, elt_bytes, align, f);
+  *result = unserialize_pool_helper (m, elt_bytes, align, f,
+                                     /* with_arg */ 0, /* f_arg*/ 0);
+}
+
+void serialize_pool_with_arg (serialize_main_t * m, va_list * va)
+{ serialize_pool_helper (m, /* serialize_function_with_arg */ 1, va); }
+
+void unserialize_pool_with_arg (serialize_main_t * m, va_list * va)
+{
+  void ** result = va_arg (*va, void **);
+  u32 elt_bytes = va_arg (*va, u32);
+  serialize_function_t * f = va_arg (*va, serialize_function_t *);
+  uword f_arg = va_arg (*va, uword);
+  *result = unserialize_pool_helper (m, elt_bytes, /* align */ 0, f,
+                                     /* with_arg */ 1, /* f_arg*/ f_arg);
 }
 
 static void serialize_vec_heap_elt (serialize_main_t * m, va_list * va)

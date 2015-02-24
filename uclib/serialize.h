@@ -414,6 +414,7 @@ serialize_function_t serialize_vector, unserialize_vector, unserialize_aligned_v
 
 /* Serialize pools. */
 serialize_function_t serialize_pool, unserialize_pool, unserialize_aligned_pool;
+serialize_function_t serialize_pool_with_arg, unserialize_pool_with_arg;
 
 #define pool_serialize(m,v,f) \
   serialize ((m), serialize_pool, (v), sizeof ((v)[0]), (f))
