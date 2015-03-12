@@ -191,13 +191,13 @@ unserialize_is_end_of_stream (serialize_main_t * m)
 {
   serialize_main_header_t * h = &m->header;
   serialize_stream_t * s = &m->stream;
-  if (h->data_function
-      && vec_len (s->overflow_buffer) + s->n_buffer_bytes - s->current_buffer_index == 0)
+  uword buffer_is_end_of_stream = vec_len (s->overflow_buffer) + s->n_buffer_bytes - s->current_buffer_index == 0;
+  if (buffer_is_end_of_stream && h->data_function)
     {
       h->data_function (h, s);
       return serialize_stream_is_end_of_stream (s);
     }
-  return 0;
+  return buffer_is_end_of_stream;
 }
 
 always_inline void
