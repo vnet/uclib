@@ -347,8 +347,7 @@ clib_socket_init (clib_socket_t * s)
 
       s->peer_addr = s->self_addr;
 
-      if (connect (s->fd, &s->peer_addr.sa, addr_len) < 0
-	  && ! (s->non_blocking_connect && errno == EINPROGRESS))
+      if (connect (s->fd, &s->peer_addr.sa, addr_len) < 0 && ! s->non_blocking_connect)
 	{
 	  error = clib_error_return_unix (0, "connect");
 	  goto done;
