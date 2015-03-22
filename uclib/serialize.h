@@ -159,6 +159,10 @@ always_inline void unserialize_main_free (serialize_main_t * m)
 typedef void (serialize_function_t) (serialize_main_t * m, va_list * va);
 
 always_inline void *
+serialize_main_get_buffer (serialize_main_t * m)
+{ return m->stream.buffer; }
+
+always_inline void *
 unserialize_get (serialize_main_t * m, uword n_bytes)
 { return serialize_stream_read_write (&m->header, &m->stream, n_bytes, SERIALIZE_FLAG_IS_READ); }
 
@@ -481,5 +485,7 @@ CLIB_INIT_ADD_TYPE (serialize_diff_type_t);
 
 clib_error_t * serialize_diff (serialize_main_t * sm, serialize_diff_type_t * ct, ...);
 clib_error_t * unserialize_diff (serialize_main_t * sm, ...);
+
+format_function_t format_serialize_current_buffer;
 
 #endif /* included_clib_serialize_h */

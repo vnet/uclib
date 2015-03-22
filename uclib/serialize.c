@@ -1025,6 +1025,13 @@ void * serialize_close_vector (serialize_main_t * m)
   return result;
 }
  
+u8 * format_serialize_current_buffer (u8 * s, va_list * va)
+{
+  serialize_main_t * sm = va_arg (*va, serialize_main_t *);
+  vec_add (s, sm->stream.buffer, sm->stream.current_buffer_index);
+  return s;
+}
+
 void
 serialize_multiple_1 (serialize_main_t * m,
 		      void * data,
